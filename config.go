@@ -1,0 +1,272 @@
+// Configuration: every *.yaml in $XDG_CONFIG_HOME/tmux-spaces/spaces.d/
+// plus an optional spaces.yaml next to it, merged. Each file declares
+// spaces under a `spaces:` mapping; a name or key declared twice
+// anywhere is an error — never a silent override — because the files
+// typically come from different sources (one per dotfiles branch).
+package main
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"go.yaml.in/yaml/v3"
+)
+
+// Space is one workspace: a tmux session with a fixed layout, shown in
+// a terminal window pinned to a desktop space, reachable by a key.
+type Space struct {
+	Name    string   `yaml:"-"`
+	Key     string   `yaml:"key"`
+	Space   int      `yaml:"space"` // desktop space; 0 = not pinned
+	Cwd     pathList `yaml:"cwd"`
+	Windows []Window `yaml:"windows"`
+	Select  string   `yaml:"select"` // window selected when the terminal is spawned; default: the first
+	Then    string   `yaml:"then"`   // run inside the session after `open` has focused it
+
+	file string // where it was declared, for error messages
+}
+
+// Window is a tmux window of a space. In YAML a bare string is a
+// window of that name running the shell.
+type Window struct {
+	Name    string   `yaml:"name"`
+	Command string   `yaml:"command"`
+	Cwd     pathList `yaml:"cwd"`
+	Panes   []Pane   `yaml:"panes"`
+	Split   string   `yaml:"split"` // horizontal (side by side, default) or vertical
+}
+
+func (w *Window) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind == yaml.ScalarNode {
+		var name string
+		if err := n.Decode(&name); err != nil {
+			return err
+		}
+		*w = Window{Name: name}
+		return nil
+	}
+	type plain Window // no UnmarshalYAML, avoids recursion
+	var p plain
+	if err := n.Decode(&p); err != nil {
+		return err
+	}
+	*w = Window(p)
+	return nil
+}
+
+// Pane is one pane of a window.
+type Pane struct {
+	Cwd     pathList `yaml:"cwd"`
+	Command string   `yaml:"command"`
+}
+
+// pathList is a directory, or a list of candidates of which the first
+// that exists is used — one config for machines that keep a repo in
+// different places.
+type pathList []string
+
+func (p *pathList) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind == yaml.ScalarNode {
+		var s string
+		if err := n.Decode(&s); err != nil {
+			return err
+		}
+		*p = pathList{s}
+		return nil
+	}
+	var list []string
+	if err := n.Decode(&list); err != nil {
+		return err
+	}
+	*p = list
+	return nil
+}
+
+// resolve returns the first candidate that is a directory, with ~ and
+// $VAR expanded. ok is false when none exists (or the list is empty).
+func (p pathList) resolve() (dir string, ok bool) {
+	for _, c := range p {
+		c = expand(c)
+		if st, err := os.Stat(c); err == nil && st.IsDir() {
+			return c, true
+		}
+	}
+	return "", false
+}
+
+// expand replaces a leading ~ and $VAR references.
+func expand(p string) string {
+	if p == "~" || strings.HasPrefix(p, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			p = home + p[1:]
+		}
+	}
+	return os.ExpandEnv(p)
+}
+
+// configDir is $XDG_CONFIG_HOME/tmux-spaces, else ~/.config/tmux-spaces.
+func configDir() (string, error) {
+	base := os.Getenv("XDG_CONFIG_HOME")
+	if base == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		base = filepath.Join(home, ".config")
+	}
+	return filepath.Join(base, "tmux-spaces"), nil
+}
+
+// configFiles lists the files that are read, in order: spaces.yaml,
+// then spaces.d/*.yaml sorted by name. Missing files are fine.
+func configFiles() ([]string, error) {
+	dir, err := configDir()
+	if err != nil {
+		return nil, err
+	}
+	var files []string
+	if _, err := os.Stat(filepath.Join(dir, "spaces.yaml")); err == nil {
+		files = append(files, filepath.Join(dir, "spaces.yaml"))
+	}
+	more, err := filepath.Glob(filepath.Join(dir, "spaces.d", "*.yaml"))
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(more)
+	return append(files, more...), nil
+}
+
+// loadSpaces reads and merges every config file.
+func loadSpaces() ([]Space, error) {
+	files, err := configFiles()
+	if err != nil {
+		return nil, err
+	}
+	var sources []source
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			return nil, err
+		}
+		sources = append(sources, source{name: f, data: data})
+	}
+	return mergeSpaces(sources)
+}
+
+type source struct {
+	name string
+	data []byte
+}
+
+// mergeSpaces parses each source and merges them, rejecting a name or
+// key declared twice. The result is sorted by name.
+func mergeSpaces(sources []source) ([]Space, error) {
+	byName := map[string]Space{}
+	byKey := map[string]string{}
+	for _, src := range sources {
+		var file struct {
+			Spaces map[string]Space `yaml:"spaces"`
+		}
+		dec := yaml.NewDecoder(bytes.NewReader(src.data))
+		dec.KnownFields(true)
+		if err := dec.Decode(&file); err != nil && !errors.Is(err, io.EOF) {
+			return nil, fmt.Errorf("%s: %w", src.name, err)
+		}
+		// Deterministic error messages: visit names in order.
+		names := make([]string, 0, len(file.Spaces))
+		for name := range file.Spaces {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			sp := file.Spaces[name]
+			sp.Name = name
+			sp.file = src.name
+			if prev, dup := byName[name]; dup {
+				return nil, fmt.Errorf("space %q is declared in both %s and %s", name, prev.file, src.name)
+			}
+			if err := sp.validate(); err != nil {
+				return nil, fmt.Errorf("%s: space %q: %w", src.name, name, err)
+			}
+			if sp.Key != "" {
+				if other, dup := byKey[sp.Key]; dup {
+					return nil, fmt.Errorf("key %q is bound to both %q and %q", sp.Key, other, name)
+				}
+				byKey[sp.Key] = name
+			}
+			byName[name] = sp
+		}
+	}
+	out := make([]Space, 0, len(byName))
+	for _, sp := range byName {
+		out = append(out, sp)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
+}
+
+// validate checks one space's shape; paths are checked by `check`
+// and at open time, because they differ per machine.
+func (sp Space) validate() error {
+	if strings.ContainsAny(sp.Name, " :.\t\n") {
+		return fmt.Errorf("name %q must not contain spaces, colons or dots (it is the tmux session name)", sp.Name)
+	}
+	if sp.Key != "" && (len(sp.Key) != 1 || !strings.ContainsAny(sp.Key, "0123456789abcdefghijklmnopqrstuvwxyz")) {
+		return fmt.Errorf("key %q must be one of 0-9 a-z", sp.Key)
+	}
+	if sp.Space < 0 {
+		return fmt.Errorf("space must be a positive number, got %d", sp.Space)
+	}
+	if len(sp.Windows) == 0 {
+		return errors.New("at least one window is required")
+	}
+	seen := map[string]bool{}
+	for i, w := range sp.Windows {
+		if w.Name == "" {
+			return fmt.Errorf("windows[%d] has no name", i)
+		}
+		if strings.ContainsAny(w.Name, " :\t\n") {
+			return fmt.Errorf("window %q must not contain spaces or colons", w.Name)
+		}
+		if seen[w.Name] {
+			return fmt.Errorf("window %q is declared twice", w.Name)
+		}
+		seen[w.Name] = true
+		if w.Split != "" && w.Split != "horizontal" && w.Split != "vertical" {
+			return fmt.Errorf("window %q: split must be horizontal or vertical, got %q", w.Name, w.Split)
+		}
+		if len(w.Panes) > 0 && w.Command != "" {
+			return fmt.Errorf("window %q: give the command to the panes, not the window", w.Name)
+		}
+	}
+	if sp.Select != "" && !seen[sp.Select] {
+		return fmt.Errorf("select names window %q, which is not declared", sp.Select)
+	}
+	return nil
+}
+
+// find returns the space with the given name.
+func find(spaces []Space, name string) (Space, bool) {
+	for _, sp := range spaces {
+		if sp.Name == name {
+			return sp, true
+		}
+	}
+	return Space{}, false
+}
+
+// findKey returns the space bound to key.
+func findKey(spaces []Space, key string) (Space, bool) {
+	for _, sp := range spaces {
+		if sp.Key == key {
+			return sp, true
+		}
+	}
+	return Space{}, false
+}
