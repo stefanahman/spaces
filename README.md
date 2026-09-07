@@ -118,6 +118,13 @@ With a Karabiner-Elements leader (`Hyper+X`, then a key), each key's
 `shell_command` is `$HOME/.local/bin/tmux-spaces key <k>` — the keys
 themselves live in the config.
 
+Hotkey daemons run commands with the base PATH (Karabiner's
+`shell_command` gets `/usr/bin:/bin:/usr/sbin:/sbin`), so tmux-spaces
+appends `/opt/homebrew/bin` and `/usr/local/bin` to its own and finds
+tmux and yabai there without a login shell in between; your PATH still
+comes first. The tmux server it starts inherits that PATH, which is
+one more reason `then` wants absolute paths.
+
 **pr-owl.** `hooks.after_open: ~/.local/bin/tmux-spaces focus pr-reviews`
 brings the review terminal to the front after every
 [pr-owl](https://github.com/stefanahman/pr-owl) open, and a `pr-reviews`

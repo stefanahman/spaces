@@ -10,7 +10,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime/debug"
+	"slices"
+	"strings"
 )
 
 // version is set by the release build (-ldflags "-X main.version=…");
@@ -41,7 +44,29 @@ type usageError string
 
 func (e usageError) Error() string { return string(e) }
 
+// toolDirs is where tmux and yabai are installed when they are not in
+// the base system: Homebrew on Apple silicon, and Homebrew on Intel or
+// a manual install.
+var toolDirs = []string{"/opt/homebrew/bin", "/usr/local/bin"}
+
+// toolPath returns path with toolDirs appended when they are missing.
+// Hotkey daemons run their commands with the base PATH — Karabiner's
+// shell_command gets /usr/bin:/bin:/usr/sbin:/sbin — and being run from
+// one is what tmux-spaces is for, so it must find tmux and yabai
+// without a login shell in between. Appended, not prepended: the
+// user's own PATH still wins.
+func toolPath(path string) string {
+	dirs := filepath.SplitList(path)
+	for _, dir := range toolDirs {
+		if !slices.Contains(dirs, dir) {
+			dirs = append(dirs, dir)
+		}
+	}
+	return strings.Join(dirs, string(os.PathListSeparator))
+}
+
 func main() {
+	os.Setenv("PATH", toolPath(os.Getenv("PATH")))
 	args := os.Args[1:]
 	if len(args) == 0 {
 		exitOn(usageError("a command is required"))
