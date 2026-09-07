@@ -48,23 +48,28 @@ func open(d desktop, sp Space, then bool, out io.Writer) error {
 // list prints every space with its session state and, when the
 // windows carry tmux-claude-status's @claude-state option, what Claude
 // is doing there.
+//
+// The formats are `:`-separated, with the name last: a tmux client
+// outside a UTF-8 locale (a hotkey daemon's environment) prints
+// control characters in command output as `_`, so a tab would not
+// survive, while `:` can't appear in a session name.
 func list(spaces []Space, out io.Writer) error {
 	sessions := map[string]sessionInfo{}
-	if outStr, err := tmux("list-sessions", "-F", "#{session_name}\t#{session_attached}\t#{session_windows}"); err == nil {
+	if outStr, err := tmux("list-sessions", "-F", "#{session_attached}:#{session_windows}:#{session_name}"); err == nil {
 		for _, line := range strings.Split(outStr, "\n") {
-			f := strings.Split(line, "\t")
+			f := strings.SplitN(line, ":", 3)
 			if len(f) != 3 {
 				continue
 			}
-			attached, _ := strconv.Atoi(f[1])
-			windows, _ := strconv.Atoi(f[2])
-			sessions[f[0]] = sessionInfo{attached: attached > 0, windows: windows}
+			attached, _ := strconv.Atoi(f[0])
+			windows, _ := strconv.Atoi(f[1])
+			sessions[f[2]] = sessionInfo{attached: attached > 0, windows: windows}
 		}
 	}
 	claude := map[string]map[string]int{}
-	if outStr, err := tmux("list-windows", "-a", "-F", "#{session_name}\t#{@claude-state}"); err == nil {
+	if outStr, err := tmux("list-windows", "-a", "-F", "#{@claude-state}:#{session_name}"); err == nil {
 		for _, line := range strings.Split(outStr, "\n") {
-			name, state, _ := strings.Cut(line, "\t")
+			state, name, _ := strings.Cut(line, ":")
 			if state == "" {
 				continue
 			}

@@ -13,6 +13,16 @@ import (
 	"github.com/creack/pty"
 )
 
+// unsetenv removes a variable for the rest of the test; t.Setenv can
+// only set it, and an empty value is not always the same as none.
+func unsetenv(t *testing.T, name string) {
+	t.Helper()
+	if old, ok := os.LookupEnv(name); ok {
+		t.Cleanup(func() { os.Setenv(name, old) })
+	}
+	os.Unsetenv(name)
+}
+
 // startTmux runs a private tmux server for the test: its own socket
 // directory (Unix socket paths are short-limited and t.TempDir is
 // long), its own minimal config (/bin/sh in every window — the
@@ -289,6 +299,13 @@ func TestOpenReportsMissingCwd(t *testing.T) {
 
 func TestList(t *testing.T) {
 	startTmux(t)
+	// A hotkey daemon's environment: no locale and no TMUX (an empty
+	// TMUX still counts as "inside tmux" to the client). The client
+	// then prints control characters in command output as `_`.
+	for _, v := range []string{"LANG", "LC_ALL", "LC_CTYPE"} {
+		t.Setenv(v, "")
+	}
+	unsetenv(t, "TMUX")
 	sp := Space{Name: "bf-1", Key: "1", Space: 3, Windows: []Window{{Name: "shell"}, {Name: "nvim"}}}
 	if err := open(newFakeDesktop(), sp, false, &strings.Builder{}); err != nil {
 		t.Fatal(err)
