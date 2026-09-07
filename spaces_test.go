@@ -230,7 +230,7 @@ func TestOpenUnpinnedSpaceIsNotMoved(t *testing.T) {
 	}
 }
 
-func TestOpenRunsThenWithAClient(t *testing.T) {
+func TestOpenRunsThenWhenTheWindowExists(t *testing.T) {
 	startTmux(t)
 	root := t.TempDir()
 	marker := filepath.Join(root, "then.ran")

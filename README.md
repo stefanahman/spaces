@@ -68,7 +68,7 @@ spaces:
         panes:
           - {cwd: ~/src/eden}
           - {cwd: ~/src/eden-private-branches, command: nvim}
-    select: work              # window shown when the terminal is spawned; default: the first
+    select: work              # window selected when the session is created; default: the first
     then: tmux display-popup -E -w 88% -h 84% pr-owl   # run after `open` has focused the space
 ```
 
@@ -141,8 +141,9 @@ make lint
 ```
 
 The macOS backend is `desktop.go`; a Linux one implements the same
-four-method interface (find the window by title, spawn a terminal
-attached to the session, move it to a workspace, focus it).
+small interface: find the terminal window by title, spawn one attached
+to the session, move it to a workspace, focus it, and — for `check` —
+list the workspaces and the tools it needs.
 
 ## License
 

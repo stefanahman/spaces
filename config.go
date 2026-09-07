@@ -27,7 +27,7 @@ type Space struct {
 	Space   int      `yaml:"space"` // desktop space; 0 = not pinned
 	Cwd     pathList `yaml:"cwd"`
 	Windows []Window `yaml:"windows"`
-	Select  string   `yaml:"select"` // window selected when the terminal is spawned; default: the first
+	Select  string   `yaml:"select"` // window selected when the session is created; default: the first
 	Then    string   `yaml:"then"`   // run inside the session after `open` has focused it
 
 	file string // where it was declared, for error messages
