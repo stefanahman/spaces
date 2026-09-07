@@ -54,7 +54,7 @@ machine).
 
 ```yaml
 spaces:
-  <name>:                     # the tmux session name and the terminal window's title
+  <name>:                     # letters, digits, - and _: the tmux session name and the terminal window's title
     key: r                    # one of 0-9 a-z, for `tmux-spaces key r`; optional
     space: 9                  # desktop space the window is pinned to; omit to leave it where it opens
     cwd: ~/src/app            # default directory for windows, panes and the terminal; a string or a list of candidates

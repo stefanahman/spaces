@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -211,11 +212,17 @@ func mergeSpaces(sources []source) ([]Space, error) {
 	return out, nil
 }
 
+// validName is what a space or a window may be called. A name becomes
+// a tmux session or window name and a `-t` target, the terminal's
+// title and, through `yabai-rules`, part of a regex that yabairc
+// evals — so only characters that mean nothing to any of them.
+var validName = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
 // validate checks one space's shape; paths are checked by `check`
 // and at open time, because they differ per machine.
 func (sp Space) validate() error {
-	if strings.ContainsAny(sp.Name, " :.\t\n") {
-		return fmt.Errorf("name %q must not contain spaces, colons or dots (it is the tmux session name)", sp.Name)
+	if !validName.MatchString(sp.Name) {
+		return fmt.Errorf("name %q: only letters, digits, - and _ are allowed (it is the tmux session name and the window's title)", sp.Name)
 	}
 	if sp.Key != "" && (len(sp.Key) != 1 || !strings.ContainsAny(sp.Key, "0123456789abcdefghijklmnopqrstuvwxyz")) {
 		return fmt.Errorf("key %q must be one of 0-9 a-z", sp.Key)
@@ -231,8 +238,8 @@ func (sp Space) validate() error {
 		if w.Name == "" {
 			return fmt.Errorf("windows[%d] has no name", i)
 		}
-		if strings.ContainsAny(w.Name, " :\t\n") {
-			return fmt.Errorf("window %q must not contain spaces or colons", w.Name)
+		if !validName.MatchString(w.Name) {
+			return fmt.Errorf("window %q: only letters, digits, - and _ are allowed", w.Name)
 		}
 		if seen[w.Name] {
 			return fmt.Errorf("window %q is declared twice", w.Name)

@@ -94,11 +94,22 @@ func TestMergeSpacesRejects(t *testing.T) {
 		"select unknown":  {{"a.yaml", []byte("spaces:\n  x: {windows: [shell], select: nvim}\n")}},
 		"name with colon": {{"a.yaml", []byte("spaces:\n  a:b: {windows: [shell]}\n")}},
 		"negative space":  {{"a.yaml", []byte("spaces:\n  x: {space: -1, windows: [shell]}\n")}},
+		// Names end up in a yabai regex that yabairc evals, in tmux
+		// targets and in a window title: letters, digits, - and _ only.
+		"name with quote":    {{"a.yaml", []byte("spaces:\n  'a\"b': {windows: [shell]}\n")}},
+		"name with subshell": {{"a.yaml", []byte("spaces:\n  '$(x)': {windows: [shell]}\n")}},
+		"name with plus":     {{"a.yaml", []byte("spaces:\n  a+b: {windows: [shell]}\n")}},
+		"name with space":    {{"a.yaml", []byte("spaces:\n  'a b': {windows: [shell]}\n")}},
+		"window with quote":  {{"a.yaml", []byte("spaces:\n  x: {windows: ['a\"b']}\n")}},
+		"window with space":  {{"a.yaml", []byte("spaces:\n  x: {windows: ['a b']}\n")}},
 	}
 	for name, srcs := range cases {
 		if _, err := mergeSpaces(srcs); err == nil {
 			t.Errorf("%s: expected an error", name)
 		}
+	}
+	if spaces, err := mergeSpaces([]source{{"a.yaml", []byte("spaces:\n  my_space-1: {windows: [w_1]}\n")}}); err != nil || len(spaces) != 1 || spaces[0].Name != "my_space-1" {
+		t.Errorf("underscores and dashes are allowed: got %v, %v", spaces, err)
 	}
 	for _, empty := range []string{"", "# nothing\n", "spaces: {}\n"} {
 		if spaces, err := mergeSpaces([]source{{"a.yaml", []byte(empty)}}); err != nil || len(spaces) != 0 {
