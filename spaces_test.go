@@ -61,7 +61,8 @@ func startTmux(t *testing.T) {
 type fakeDesktop struct {
 	calls   []string
 	present map[string]bool
-	pending int // polls left before a spawned window is reported
+	pending int   // polls left before a spawned window is reported
+	indexes []int // the desktop spaces `check` can pin to
 }
 
 func newFakeDesktop() *fakeDesktop { return &fakeDesktop{present: map[string]bool{}} }
@@ -93,6 +94,8 @@ func (d *fakeDesktop) focus(id string) error {
 	d.calls = append(d.calls, "focus "+id)
 	return nil
 }
+
+func (d *fakeDesktop) spaces() ([]int, error) { return d.indexes, nil }
 
 func (d *fakeDesktop) requirements() []requirement {
 	return []requirement{{"tmux", func() bool { return true }}}
@@ -344,5 +347,39 @@ func TestLockSpaceSerialises(t *testing.T) {
 	unlock()
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		t.Fatalf("lock after release: %v", err)
+	}
+}
+
+func TestCheck(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir()) // no config files of the developer's
+	d := newFakeDesktop()
+	d.indexes = []int{1, 2, 3}
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing")
+	shell := []Window{{Name: "shell"}}
+	spaces := []Space{
+		{Name: "a", Space: 2, Cwd: pathList{dir}, Windows: shell},
+		{Name: "b", Space: 9, Cwd: pathList{dir}, Windows: shell},
+		{Name: "c", Cwd: pathList{missing}, Windows: shell},
+		{Name: "d", Space: 2, Cwd: pathList{dir}, Windows: shell},
+	}
+	var out strings.Builder
+	err := check(d, spaces, &out)
+	for _, want := range []string{
+		"error: b: desktop space 9 does not exist (this desktop has 1..3)",
+		"error: c: none of cwd [" + missing + "] exists",
+		"warning: desktop space 2 is claimed by a, d",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("check output lacks %q:\n%s", want, out.String())
+		}
+	}
+	for _, fine := range []string{"error: a:", "error: d:"} {
+		if strings.Contains(out.String(), fine) {
+			t.Errorf("check output has %q, which is not a problem:\n%s", fine, out.String())
+		}
+	}
+	if err == nil || err.Error() != "2 problem(s)" {
+		t.Errorf("check returned %v, want 2 problem(s)", err)
 	}
 }

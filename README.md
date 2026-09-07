@@ -88,7 +88,7 @@ tmux's PATH, not your shell's.
 | `key <k>` | `open` the space bound to `k`; exit 1 when none is |
 | `list` | name, key, space, session state, and the [tmux-claude-status](https://github.com/stefanahman/tmux-claude-status) chip of its windows (`1⚠ 2~ 1* 3`: blocked, working, done, idle) |
 | `yabai-rules` | one `yabai -m rule` per pinned space — `eval` it in your yabairc so the space number has one home |
-| `check` | missing directories, tools, and desktop spaces claimed twice |
+| `check` | missing directories and tools, desktop spaces that don't exist or are claimed twice |
 | `config path` | the directory it reads |
 
 Exit status: 64 for a bad invocation, 1 for a failure.

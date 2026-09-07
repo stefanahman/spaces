@@ -27,6 +27,9 @@ type desktop interface {
 	moveToSpace(id string, space int) error
 	// focus brings the window to the front.
 	focus(id string) error
+	// spaces lists the desktop spaces by the index `space` pins to,
+	// for `check`.
+	spaces() ([]int, error)
 	// requirements lists the tools this desktop needs, for `check`.
 	requirements() []requirement
 }
@@ -95,6 +98,28 @@ func (yabaiGhostty) moveToSpace(id string, space int) error {
 func (yabaiGhostty) focus(id string) error {
 	_, err := runOut(exec.Command("yabai", "-m", "window", "--focus", id))
 	return err
+}
+
+// yabaiSpace is the subset of `yabai -m query --spaces` we read: the
+// mission-control index, which is what `--space N` and the rules use.
+type yabaiSpace struct {
+	Index int `json:"index"`
+}
+
+func (yabaiGhostty) spaces() ([]int, error) {
+	out, err := runOut(exec.Command("yabai", "-m", "query", "--spaces"))
+	if err != nil {
+		return nil, err
+	}
+	var spaces []yabaiSpace
+	if err := json.Unmarshal([]byte(out), &spaces); err != nil {
+		return nil, fmt.Errorf("yabai -m query --spaces: %w", err)
+	}
+	indexes := make([]int, len(spaces))
+	for i, s := range spaces {
+		indexes[i] = s.Index
+	}
+	return indexes, nil
 }
 
 func (yabaiGhostty) requirements() []requirement {

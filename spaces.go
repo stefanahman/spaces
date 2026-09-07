@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -195,8 +196,9 @@ func yabaiRules(spaces []Space, out io.Writer) {
 }
 
 // check reports what would stop a space from opening on this machine:
-// missing directories, duplicate desktop spaces, missing tools. Exit
-// status 1 when anything is wrong; warnings alone pass.
+// missing directories, desktop spaces that don't exist, duplicate
+// desktop spaces, missing tools. Exit status 1 when anything is wrong;
+// warnings alone pass.
 func check(d desktop, spaces []Space, out io.Writer) error {
 	problems := 0
 	files, _ := configFiles()
@@ -236,10 +238,31 @@ func check(d desktop, spaces []Space, out io.Writer) error {
 			fmt.Fprintf(out, "warning: desktop space %d is claimed by %s\n", n, strings.Join(names, ", "))
 		}
 	}
+	toolsOK := true
 	for _, r := range d.requirements() {
 		if !r.ok() {
 			fmt.Fprintf(out, "error: %s not found\n", r.name)
 			problems++
+			toolsOK = false
+		}
+	}
+	// A pin to a desktop space that doesn't exist fails open half-way,
+	// after the window was spawned. Only asked with the tools present:
+	// without them the query can't work, and that is reported above.
+	if toolsOK {
+		if have, err := d.spaces(); err != nil {
+			fmt.Fprintf(out, "error: desktop spaces: %v\n", err)
+			problems++
+		} else if len(have) == 0 {
+			fmt.Fprintf(out, "error: desktop spaces: none reported\n")
+			problems++
+		} else {
+			for _, sp := range spaces {
+				if sp.Space > 0 && !slices.Contains(have, sp.Space) {
+					fmt.Fprintf(out, "error: %s: desktop space %d does not exist (this desktop has 1..%d)\n", sp.Name, sp.Space, slices.Max(have))
+					problems++
+				}
+			}
 		}
 	}
 	if problems > 0 {
