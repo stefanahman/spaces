@@ -134,6 +134,12 @@ func ensureWindow(d desktop, sp Space) (spawned bool, err error) {
 	if err != nil {
 		return false, err
 	}
+	if id == "" && hasClient(sp.Name) {
+		// A terminal is attached to the session but the window manager
+		// can't show us its window (screen locked, or the title was
+		// changed by hand). Spawning would only add a duplicate.
+		return false, fmt.Errorf("%s: a terminal is attached to the session but no window titled %q is visible to the window manager (screen locked?)", sp.Name, sp.Name)
+	}
 	if id == "" {
 		cwd, _ := sp.Cwd.resolve()
 		argv, err := attachCommand(sp.Name)

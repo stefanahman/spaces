@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/creack/pty"
 )
 
 // startTmux runs a private tmux server for the test: its own socket
@@ -237,6 +239,39 @@ func TestOpenRunsThenWithAClient(t *testing.T) {
 	}
 	if err := open(d, sp, false, &strings.Builder{}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestOpenRefusesToDuplicateAnAttachedSession(t *testing.T) {
+	startTmux(t)
+	sp := Space{Name: "seen", Windows: []Window{{Name: "shell"}}}
+	d := newFakeDesktop()
+	if err := open(d, sp, false, &strings.Builder{}); err != nil {
+		t.Fatal(err)
+	}
+	// A terminal attaches through a real pty, then the window manager
+	// stops seeing the window (a locked screen does exactly this).
+	attach := exec.Command("tmux", "attach-session", "-t", target("seen", ""))
+	attach.Env = append(os.Environ(), "TERM=xterm")
+	ptmx, err := pty.Start(attach)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = attach.Process.Kill(); _, _ = attach.Process.Wait(); _ = ptmx.Close() })
+	if !waitForClient("seen", 3*time.Second) {
+		t.Fatal("client did not attach")
+	}
+	d.present["seen"] = false
+	d.calls = nil
+
+	err = open(d, sp, false, &strings.Builder{})
+	if err == nil || !strings.Contains(err.Error(), "no window titled") {
+		t.Errorf("got %v, want the blind-window-manager error", err)
+	}
+	for _, c := range d.calls {
+		if strings.HasPrefix(c, "spawn") {
+			t.Errorf("spawned a duplicate: %v", d.calls)
+		}
 	}
 }
 

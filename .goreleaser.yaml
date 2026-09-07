@@ -1,0 +1,55 @@
+# goreleaser v2 — `goreleaser check` validates, `goreleaser release --clean`
+# runs on a v* tag (.github/workflows/release.yml).
+version: 2
+
+project_name: tmux-spaces
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: .
+    binary: tmux-spaces
+    env: [CGO_ENABLED=0]
+    goos: [darwin]
+    goarch: [amd64, arm64]
+    ldflags: ["-s -w -X main.version={{ .Version }}"]
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files: [LICENSE, README.md]
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude: ["^test:", "^ci:", "^build:", "^style:"]
+
+# Homebrew cask in stefanahman/homebrew-tap: `brew install --cask stefanahman/tap/tmux-spaces`.
+# Casks (not formulas) are what goreleaser recommends for prebuilt binaries;
+# the binaries are unsigned, so the hook strips the quarantine attribute.
+homebrew_casks:
+  - name: tmux-spaces
+    repository:
+      owner: stefanahman
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/stefanahman/tmux-spaces
+    description: "One config for your tmux sessions on desktop spaces"
+    license: MIT
+    binaries: [tmux-spaces]
+    dependencies:
+      - formula: tmux
+    # yabai comes from a third-party tap (koekeishiya/formulae); not
+    # declared here so the cask installs without it — `check` reports it.
+    hooks:
+      post:
+        install: |
+          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/tmux-spaces"]
+          end
