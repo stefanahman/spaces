@@ -74,8 +74,10 @@ spaces:
 
 `~` and `$VAR` are expanded. `then` runs through `tmux run-shell` inside
 the session, in the background, after a client is attached — so
-`display-popup` works straight from a hotkey. Give it absolute paths:
-it runs with tmux's PATH, not your shell's.
+`display-popup` works straight from a hotkey. tmux expands the command
+with its format engine first: `#{…}` and `#S` are substituted, and a
+literal `#` must be written `##`. Give it absolute paths: it runs with
+tmux's PATH, not your shell's.
 
 ## Commands
 
