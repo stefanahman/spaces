@@ -37,12 +37,12 @@ a small interface so a Hyprland one can follow.
 ## Install
 
 ```sh
-go install github.com/stefanahman/tmux-spaces@latest
+brew install --cask stefanahman/tap/tmux-spaces
+go install github.com/stefanahman/tmux-spaces@latest   # with Go 1.25
 ```
 
 or from a checkout, `make install BIN=~/.local/bin`. Needs tmux, yabai
-and Ghostty; Go 1.25 to build. `tmux-spaces check` tells you what's
-missing.
+and Ghostty; `tmux-spaces check` tells you what's missing.
 
 ## Config
 
