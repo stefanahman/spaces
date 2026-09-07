@@ -1,12 +1,14 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -46,6 +48,7 @@ func startTmux(t *testing.T) {
 	t.Setenv("TMUX_TMPDIR", sockDir)
 	t.Setenv("TMUX", "")
 	t.Setenv("HISTFILE", "")
+	t.Setenv("XDG_CACHE_HOME", t.TempDir()) // open's lock files stay out of the developer's cache
 	if _, err := tmux("-L", "default", "-f", conf, "start-server"); err != nil {
 		t.Fatal(err)
 	}
@@ -321,5 +324,25 @@ func TestList(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("list lacks %q:\n%s", want, out.String())
 		}
+	}
+}
+
+func TestLockSpaceSerialises(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	unlock, err := lockSpace("bf-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(filepath.Join(os.Getenv("XDG_CACHE_HOME"), "tmux-spaces", "bf-1.lock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); !errors.Is(err, syscall.EWOULDBLOCK) {
+		t.Fatalf("a second open while the first holds the lock: %v, want EWOULDBLOCK", err)
+	}
+	unlock()
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		t.Fatalf("lock after release: %v", err)
 	}
 }

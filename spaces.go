@@ -4,9 +4,12 @@ package main
 import (
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"text/tabwriter"
 	"time"
 )
@@ -15,6 +18,11 @@ import (
 // desktop space, focus — and, with then, the space's `then` command
 // once a client is attached.
 func open(d desktop, sp Space, then bool, out io.Writer) error {
+	unlock, err := lockSpace(sp.Name)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	created, err := ensureSession(sp)
 	if err != nil {
 		return err
@@ -43,6 +51,45 @@ func open(d desktop, sp Space, then bool, out io.Writer) error {
 		return fmt.Errorf("%s: no client attached within 3s, not running then", sp.Name)
 	}
 	return runThen(sp)
+}
+
+// lockSpace serialises open per space. Two opens of the same space at
+// once — a double key press — each found no window and each spawned
+// one: the duplicate guard only knows about attached sessions, and
+// neither had attached yet. An advisory lock held for the whole of
+// open makes the second wait, then find what the first created.
+func lockSpace(name string) (unlock func(), err error) {
+	dir, err := lockDir()
+	if err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, err
+	}
+	f, err := os.OpenFile(filepath.Join(dir, name+".lock"), os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		f.Close()
+		return nil, fmt.Errorf("lock %s: %w", f.Name(), err)
+	}
+	return func() {
+		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		_ = f.Close()
+	}, nil
+}
+
+// lockDir is $XDG_CACHE_HOME/tmux-spaces, else the OS cache dir.
+func lockDir() (string, error) {
+	if base := os.Getenv("XDG_CACHE_HOME"); base != "" {
+		return filepath.Join(base, "tmux-spaces"), nil
+	}
+	base, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(base, "tmux-spaces"), nil
 }
 
 // list prints every space with its session state and, when the
