@@ -153,9 +153,9 @@ func TestRenderOnCmux(t *testing.T) {
 		t.Fatalf("bf-1 = %+v", bf)
 	}
 	// A fresh surface is moved to its directory, then its command is
-	// typed — with the CMUX_SURFACE_ID mux's Run carries when the process lacks it.
+	// typed, as it is.
 	nvimTab := bf.Panes[0].Surfaces[1].ID
-	if got := fake.Typed(nvimTab); !reflect.DeepEqual(got, []string{"cd '" + dirs["bardo"] + "'", "<enter>", "CMUX_SURFACE_ID=" + nvimTab + " nvim", "<enter>"}) {
+	if got := fake.Typed(nvimTab); !reflect.DeepEqual(got, []string{"cd '" + dirs["bardo"] + "'", "<enter>", "nvim", "<enter>"}) {
 		t.Errorf("bf-1 nvim tab typed %v", got)
 	}
 	eden, _ := fake.Workspace("eden")
@@ -167,8 +167,7 @@ func TestRenderOnCmux(t *testing.T) {
 	}
 	owl, _ := fake.Workspace("pr-owl")
 	root := owl.Panes[0].Surfaces[0].ID
-	// the test process has no CMUX_SURFACE_ID: mux's Run carries it.
-	if got := fake.Typed(root); !reflect.DeepEqual(got, []string{"CMUX_SURFACE_ID=" + root + " pr-owl --mux cmux", "<enter>"}) {
+	if got := fake.Typed(root); !reflect.DeepEqual(got, []string{"pr-owl --mux cmux", "<enter>"}) {
 		t.Errorf("pr-owl typed %v", got)
 	}
 	if fake.State().Selected != owl.ID {
