@@ -177,10 +177,44 @@ process of a pane under its first surface. The multiplexer gets 20
 seconds to answer after its launch.
 
 `multiplexer` is required with `workspaces` and pointless without;
-`session` applies to herdr. `select` names a workspace. Keys belong
-to spaces, not to the workspaces inside one: Hyper+X h opens the herdr
-space on the `select` workspace, and the multiplexer's own keys move
-between the others.
+`session` applies to herdr. `select` names a workspace.
+
+**Switching multiplexer.** A workspace inside a herdr or cmux space
+can carry a `key:` too, and one key may be bound once per multiplexer
+— bf-1 as a tmux space on key 1, as a herdr workspace on key 1, as a
+cmux workspace on key 1. Which one a press opens is the *active
+multiplexer*: one word in `$XDG_STATE_HOME/spaces/multiplexer`
+(`~/.local/state/spaces/multiplexer`), `tmux` when absent.
+
+```yaml
+spaces:
+  bf-1:
+    key: "1"                      # the tmux space
+    space: 3
+    windows: [shell, {name: nvim, command: nvim}]
+  herdr:
+    key: h
+    space: 7
+    command: herdr --session work
+    multiplexer: herdr
+    workspaces:
+      bf-1: {key: "1", cwd: ~/src/app, windows: [shell, {name: nvim, command: nvim}]}   # the same key, in herdr
+      pr-owl: {key: r, cwd: ~/src/app, windows: [{name: pr-owl, command: pr-owl}]}
+    select: pr-owl
+```
+
+`spaces use` lists the multiplexers the config declares, the active
+one marked, and on a terminal asks which to use — a number or a name;
+an empty answer leaves it. `spaces use cmux` sets it outright. A
+change is printed and shown as a desktop notification. `spaces key 1`
+then opens the holder in the active multiplexer: the tmux space, or
+the herdr space on its bf-1 workspace, which lands on that workspace
+instead of the space's `select`. A key bound in only one multiplexer
+opens there whatever is active — `r` above, or a space's own key. A
+key bound in several with none of them active is refused, naming
+them. Within one multiplexer a key is bound at most once: two tmux
+spaces, two workspaces of one cmux space or of two, or a space and one
+of its own workspaces on the same key are errors that name both.
 
 ## Commands
 
@@ -188,8 +222,9 @@ between the others.
 |---|---|
 | `open <name>` | ensure the session and its windows (or the program), find or spawn the terminal window — or find or launch the application — pin it to `space` when new, focus it, build its workspaces, then run `then` |
 | `focus <name>` | the same without `then` — for other tools that just need the space in front |
-| `key <k>` | `open` the space bound to `k`; exit 1 when none is |
-| `list` | name, key, space, session state (for a command or app space: whether its window is open, and how many of its workspaces exist), and the [tmux-claude-status](https://github.com/stefanahman/tmux-claude-status) chip of its windows (`1⚠ 2~ 1* 3`: blocked, working, done, idle) |
+| `key <k>` | `open` what `k` is bound to — a space, or a herdr/cmux space on one of its workspaces — the active multiplexer deciding when several are; exit 1 when none is, or when a choice is needed |
+| `use [tmux\|herdr\|cmux]` | pick, or set, the active multiplexer; without an argument, off a terminal, just list them with the active one marked |
+| `list` | the active multiplexer, then name, key (a space's own, and its workspaces' in brackets), space, session state (for a command or app space: whether its window is open, and how many of its workspaces exist), and the [tmux-claude-status](https://github.com/stefanahman/tmux-claude-status) chip of its windows (`1⚠ 2~ 1* 3`: blocked, working, done, idle) |
 | `yabai-rules` | one `yabai -m rule` per pinned space — `eval` it in your yabairc so the space number has one home |
 | `check` | missing directories (workspaces' too), commands, applications and tools, desktop spaces that don't exist or are claimed twice |
 | `config path` | the directory it reads |
