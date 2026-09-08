@@ -5,6 +5,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -61,6 +62,17 @@ func keyHolders(spaces []Space, key string) []keyHolder {
 	return holders
 }
 
+// ambiguousKey is a key bound in several multiplexers, none of them
+// the active one: a press cannot know where to go.
+type ambiguousKey struct {
+	key    string
+	realms []string
+}
+
+func (e *ambiguousKey) Error() string {
+	return fmt.Sprintf("key %q is bound in %s; `spaces use` one of them", e.key, strings.Join(e.realms, " and "))
+}
+
 // resolveKey picks the holder a press opens: the one in the active
 // multiplexer, else the only one there is.
 func resolveKey(spaces []Space, key, active string) (keyHolder, error) {
@@ -84,19 +96,31 @@ func resolveKey(spaces []Space, key, active string) (keyHolder, error) {
 		}
 		realms = append(realms, realm)
 	}
-	return keyHolder{}, fmt.Errorf("key %q is bound in %s; `spaces use` one of them", key, strings.Join(realms, " and "))
+	return keyHolder{}, &ambiguousKey{key: key, realms: realms}
 }
 
 // keyCmd is `spaces key <k>`: open what the key resolves to — a space,
 // or a space on one of its workspaces — then the space's then. The
 // desktop is asked for only once the key has resolved: a miss is
-// about the key, whatever the OS.
+// about the key, whatever the OS. A key that lives in multiplexers
+// other than the active one does nothing but say so, as a desktop
+// notification: a hotkey has no terminal to print to, and the press
+// was not a mistake worth an error.
 func keyCmd(newDesktop func() (desktop, error), spaces []Space, key string, out io.Writer) error {
 	active, err := activeMultiplexer()
 	if err != nil {
 		return err
 	}
 	h, err := resolveKey(spaces, key, active)
+	var ambiguous *ambiguousKey
+	if errors.As(err, &ambiguous) {
+		d, derr := newDesktop()
+		if derr != nil {
+			return err
+		}
+		fmt.Fprintln(out, err)
+		return d.notify("spaces", err.Error())
+	}
 	if err != nil {
 		return err
 	}

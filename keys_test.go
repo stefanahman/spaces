@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -148,17 +149,25 @@ func TestKeyOpensTheWorkspaceOfTheActiveMultiplexer(t *testing.T) {
 	if !strings.Contains(out.String(), "herdr: focused; pr-owl selected") || fake.Focused() != fake.Workspace("pr-owl").ID {
 		t.Errorf("output %q, focused %q", out.String(), fake.Focused())
 	}
-	// cmux active, key 1 bound in tmux and herdr: a choice is asked for.
+	// cmux active, key 1 bound in tmux and herdr: nothing opens, the
+	// press is answered with a notification, and it is not an error.
 	if err := setActiveMultiplexer("cmux"); err != nil {
 		t.Fatal(err)
 	}
-	if err := keyCmd(func() (desktop, error) { return d, nil }, spaces, "1", &out); err == nil || !strings.Contains(err.Error(), "bound in tmux and herdr") {
-		t.Errorf("ambiguous key: %v", err)
+	out.Reset()
+	d.calls = nil
+	if err := keyCmd(func() (desktop, error) { return d, nil }, spaces, "1", &out); err != nil {
+		t.Errorf("a key bound elsewhere is not an error: %v", err)
 	}
-	for _, c := range d.calls {
-		if strings.HasPrefix(c, "spawn bf-1") {
-			t.Errorf("the tmux space was opened: %v", d.calls)
-		}
+	if want := []string{"notify spaces key \"1\" is bound in tmux and herdr; `spaces use` one of them"}; !reflect.DeepEqual(d.calls, want) {
+		t.Errorf("desktop calls = %v, want only the notification", d.calls)
+	}
+	if !strings.Contains(out.String(), "bound in tmux and herdr") {
+		t.Errorf("output %q", out.String())
+	}
+	// Without a desktop to notify with, the reason is the error.
+	if err := keyCmd(func() (desktop, error) { return nil, errors.New("no desktop") }, spaces, "1", &out); err == nil || !strings.Contains(err.Error(), "bound in tmux and herdr") {
+		t.Errorf("ambiguous key without a desktop: %v", err)
 	}
 }
 

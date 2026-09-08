@@ -241,8 +241,9 @@ then opens the holder in the active multiplexer: the tmux space, or
 the herdr space on its `app` workspace, which lands on that workspace
 instead of the space's `select`. A key bound in only one multiplexer
 opens there whatever is active — `r` above, or a space's own key. A
-key bound in several with none of them active is refused, naming
-them. Within one multiplexer a key is bound at most once: two tmux
+key bound in several with none of them active opens nothing and says
+so in a desktop notification, naming them — a hotkey has no terminal
+to answer on. Within one multiplexer a key is bound at most once: two tmux
 spaces, two workspaces of one cmux space or of two, or a space and one
 of its own workspaces on the same key are errors that name both.
 
