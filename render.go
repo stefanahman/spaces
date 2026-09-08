@@ -6,6 +6,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -282,9 +283,9 @@ func checkMultiplexers(out io.Writer, spaces []Space) int {
 		if err == nil {
 			continue
 		}
-		// Ping's one error tells "not running" from "running wrong"
-		// only in its words; these are mux's for the latter.
-		if msg := err.Error(); strings.Contains(msg, "child sessions") || strings.Contains(msg, "hooks never engage") {
+		// A multiplexer that isn't running is nothing to report; one
+		// running with the wrong environment is.
+		if errors.Is(err, mux.ErrTainted) {
 			fmt.Fprintf(out, "error: %v\n", err)
 			problems++
 		}

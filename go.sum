@@ -1,7 +1,7 @@
 github.com/creack/pty v1.1.24 h1:bJrF4RRfyJnbTJqzRLHzcGaZK1NeM5kTC9jGgovnR1s=
 github.com/creack/pty v1.1.24/go.mod h1:08sCNb52WyoAwi2QDyzUCTgcvVFhUzewun7wtTfvcwE=
-github.com/stefanahman/mux v0.3.0 h1:h9pAWekbVV4anEHtRFeE88FZaialy/YSoQgSSJ23KMQ=
-github.com/stefanahman/mux v0.3.0/go.mod h1:mFmRJqJuAuwKsMGu+YaRTsRsxJkAggolGQ7B2IOWKkM=
+github.com/stefanahman/mux v0.4.0 h1:+vvKJ95uTDK/K39KqYNtS73+ucFZAPO2OOQqVVo8Zjw=
+github.com/stefanahman/mux v0.4.0/go.mod h1:mFmRJqJuAuwKsMGu+YaRTsRsxJkAggolGQ7B2IOWKkM=
 go.yaml.in/yaml/v3 v3.0.5 h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=
 go.yaml.in/yaml/v3 v3.0.5/go.mod h1:HVTZu1O7/Vkt2N+BFy8Zza+lnLsABggaTM2ZpNIGuKg=
 golang.org/x/sys v0.48.0 h1:bbX/i/6MgT9BVLM9RT1thmxL04yeTAhbEz4SyadbXoo=

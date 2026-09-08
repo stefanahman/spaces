@@ -563,6 +563,13 @@ func stubDrivers(t *testing.T, ping func(kind, session string) error) {
 	t.Cleanup(func() { newDriver = real })
 }
 
+// tainted is Ping's error for a multiplexer that runs, started with
+// the wrong environment: mux.ErrTainted behind its message.
+type tainted string
+
+func (e tainted) Error() string      { return string(e) }
+func (tainted) Is(target error) bool { return target == mux.ErrTainted }
+
 // check audits tmux and each herdr session and cmux the spaces
 // declare, once each: a multiplexer started with the wrong
 // environment is a problem, one that isn't running is not.
@@ -573,9 +580,9 @@ func TestCheckAuditsMultiplexers(t *testing.T) {
 		asked = append(asked, strings.TrimSpace(kind+" "+session))
 		switch kind {
 		case "tmux":
-			return errors.New("tmux: the server was started from inside a Claude Code session (CLAUDECODE): agents started in it run as child sessions and save no transcript; restart it from a hotkey or a plain shell")
+			return tainted("tmux: the server was started from inside a Claude Code session (CLAUDECODE): agents started in it run as child sessions and save no transcript; restart it from a hotkey or a plain shell")
 		case "cmux":
-			return errors.New("cmux: the app was launched with TMUX in its environment (from a shell inside tmux): its shell integration hands CMUX_SURFACE_ID to tmux before every command and the Claude Code hooks never engage; relaunch cmux from a hotkey or Spotlight")
+			return tainted("cmux: the app was launched with TMUX in its environment (from a shell inside tmux): its shell integration hands CMUX_SURFACE_ID to tmux before every command and the Claude Code hooks never engage; relaunch cmux from a hotkey or Spotlight")
 		}
 		return errors.New("dial unix /nowhere/herdr.sock: connect: no such file or directory")
 	})
