@@ -121,6 +121,11 @@ func (d *fakeDesktop) requirements() []requirement {
 	return []requirement{{"tmux", func() bool { return true }}}
 }
 
+func (d *fakeDesktop) notify(title, text string) error {
+	d.calls = append(d.calls, "notify "+title+" "+text)
+	return nil
+}
+
 // activeWindow is the session's current window. (display-message -t
 // <session> prints nothing without a client, so ask list-windows.)
 func activeWindow(t *testing.T, session string) string {

@@ -36,6 +36,7 @@ const usage = `usage: spaces open <name>    bring the space up (its session or p
        spaces focus <name>   same, without the then command
        spaces key <k>        open the space bound to key k
        spaces list           every space with its session (or window) and Claude state
+       spaces use [tmux|herdr|cmux]   pick, or set, the active multiplexer: where a key bound in several of them lands
        spaces yabai-rules    the yabai rules that pin the windows to their spaces (eval in yabairc)
        spaces check          validate the config and this machine
        spaces config path
@@ -116,6 +117,16 @@ func main() {
 	case "list":
 		d, _ := newDesktop() // nil off macOS: list still works, command spaces show "?"
 		exitOn(list(d, spaces, os.Stdout))
+	case "use":
+		if len(args) > 2 {
+			exitOn(usageError("use: expected at most one of tmux, herdr, cmux"))
+		}
+		arg := ""
+		if len(args) == 2 {
+			arg = args[1]
+		}
+		d, _ := newDesktop() // nil off macOS: the switch works, the notification is skipped
+		exitOn(useCmd(d, spaces, arg, os.Stdin, os.Stdout))
 	case "yabai-rules":
 		yabaiRules(spaces, os.Stdout)
 	case "check":

@@ -28,7 +28,7 @@ func TestCLI(t *testing.T) {
 	}
 	run := func(args ...string) (string, int) {
 		cmd := exec.Command(bin, args...)
-		cmd.Env = append(os.Environ(), "XDG_CONFIG_HOME="+root)
+		cmd.Env = append(os.Environ(), "XDG_CONFIG_HOME="+root, "XDG_STATE_HOME="+root)
 		out, err := cmd.CombinedOutput()
 		code := 0
 		if ee, ok := err.(*exec.ExitError); ok {
@@ -52,6 +52,8 @@ func TestCLI(t *testing.T) {
 		{[]string{"yabai-rules"}, 0, `yabai -m rule --add app="^Ghostty$" title="^herdr$" space=^7`},
 		{[]string{"yabai-rules"}, 0, `yabai -m rule --add app="^cmux$" space=^8`},
 		{[]string{"key", "z"}, 1, `no space bound to key "z"`},
+		{[]string{"use"}, 0, "* 1) tmux\n  2) herdr\n"}, // stdin is no terminal here: the list, nothing asked
+		{[]string{"use", "screen"}, 64, "expected tmux, herdr or cmux"},
 		{[]string{"open", "nope"}, 1, `no space named "nope"`},
 	}
 	for _, c := range cases {

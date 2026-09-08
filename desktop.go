@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -39,6 +40,8 @@ type desktop interface {
 	spaces() ([]int, error)
 	// requirements lists the tools this desktop needs, for `check`.
 	requirements() []requirement
+	// notify shows the user a short message, the desktop's way.
+	notify(title, text string) error
 }
 
 type requirement struct {
@@ -118,6 +121,15 @@ func (yabaiGhostty) spawn(title, cwd string, argv []string) error {
 	}
 	args = append(append(args, "-e"), argv...)
 	_, err := runOut(exec.Command("open", args...))
+	return err
+}
+
+// notify posts a notification through AppleScript; the strings are
+// placed in double quotes, so those and backslashes are escaped.
+func (yabaiGhostty) notify(title, text string) error {
+	quote := strings.NewReplacer(`\`, `\\`, `"`, `\"`)
+	script := fmt.Sprintf(`display notification "%s" with title "%s"`, quote.Replace(text), quote.Replace(title))
+	_, err := runOut(exec.Command("osascript", "-e", script))
 	return err
 }
 
