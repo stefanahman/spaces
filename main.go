@@ -1,9 +1,10 @@
 // tmux-spaces — one config for tmux sessions on desktop spaces.
 //
-// A space is a tmux session with a fixed window/pane layout, shown in
-// one terminal window that the window manager pins to a desktop
-// space, reachable by a key. The config declares all three; the tool
-// creates what is missing and focuses what exists.
+// A space is one terminal window that the window manager pins to a
+// desktop space, reachable by a key. It shows a tmux session with a
+// fixed window/pane layout, or runs one program directly. The config
+// declares all of it; the tool creates what is missing and focuses
+// what exists.
 package main
 
 import (
@@ -30,10 +31,10 @@ func versionString() string {
 	return "dev"
 }
 
-const usage = `usage: tmux-spaces open <name>    ensure the session and its terminal window, focus it, run its then command
+const usage = `usage: tmux-spaces open <name>    bring the space up (its session or program, in its terminal window), focus it, run its then command
        tmux-spaces focus <name>   same, without the then command
        tmux-spaces key <k>        open the space bound to key k
-       tmux-spaces list           every space with its session and Claude state
+       tmux-spaces list           every space with its session (or window) and Claude state
        tmux-spaces yabai-rules    the yabai rules that pin the windows to their spaces (eval in yabairc)
        tmux-spaces check          validate the config and this machine
        tmux-spaces config path
@@ -112,7 +113,8 @@ func main() {
 		exitOn(err)
 		exitOn(open(d, sp, true, os.Stdout))
 	case "list":
-		exitOn(list(spaces, os.Stdout))
+		d, _ := newDesktop() // nil off macOS: list still works, command spaces show "?"
+		exitOn(list(d, spaces, os.Stdout))
 	case "yabai-rules":
 		yabaiRules(spaces, os.Stdout)
 	case "check":

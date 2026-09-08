@@ -39,6 +39,13 @@ spaces:
     select: nvim
   unpinned:
     windows: [shell]
+  herdr:
+    key: h
+    space: 7
+    cwd: ~/src/app
+    command: herdr --session work
+  note:
+    command: [sh, -c, "echo hi there"]
 `)},
 	})
 	if err != nil {
@@ -48,12 +55,18 @@ spaces:
 	for _, sp := range spaces {
 		names = append(names, sp.Name)
 	}
-	if want := []string{"bf-1", "eden", "pr-reviews", "unpinned"}; !reflect.DeepEqual(names, want) {
+	if want := []string{"bf-1", "eden", "herdr", "note", "pr-reviews", "unpinned"}; !reflect.DeepEqual(names, want) {
 		t.Errorf("names = %v, want %v", names, want)
 	}
 	bf, _ := find(spaces, "bf-1")
-	if bf.Key != "1" || bf.Space != 3 || bf.file != "a.yaml" {
+	if bf.Key != "1" || bf.Space != 3 || bf.file != "a.yaml" || bf.isCommand() {
 		t.Errorf("bf-1 = %+v", bf)
+	}
+	if herdr, _ := find(spaces, "herdr"); !herdr.isCommand() || !reflect.DeepEqual(herdr.Command, argv{"herdr", "--session", "work"}) || herdr.Space != 7 {
+		t.Errorf("herdr = %+v", herdr)
+	}
+	if note, _ := find(spaces, "note"); !reflect.DeepEqual(note.Command, argv{"sh", "-c", "echo hi there"}) {
+		t.Errorf("note (a list keeps an argument with a space) = %+v", note)
 	}
 	if want := []Window{{Name: "shell"}, {Name: "nvim", Command: "nvim"}}; !reflect.DeepEqual(bf.Windows, want) {
 		t.Errorf("bf-1 windows = %+v, want %+v", bf.Windows, want)
@@ -87,6 +100,10 @@ func TestMergeSpacesRejects(t *testing.T) {
 		"bad key":         {{"a.yaml", []byte("spaces:\n  x: {key: ab, windows: [shell]}\n")}},
 		"upper key":       {{"a.yaml", []byte("spaces:\n  x: {key: A, windows: [shell]}\n")}},
 		"no windows":      {{"a.yaml", []byte("spaces:\n  x: {key: a}\n")}},
+		"windows+command": {{"a.yaml", []byte("spaces:\n  x: {windows: [shell], command: herdr}\n")}},
+		"blank command":   {{"a.yaml", []byte("spaces:\n  x: {command: ' '}\n")}},
+		"blank program":   {{"a.yaml", []byte("spaces:\n  x: {command: ['']}\n")}},
+		"select+command":  {{"a.yaml", []byte("spaces:\n  x: {command: herdr, select: w}\n")}},
 		"window twice":    {{"a.yaml", []byte("spaces:\n  x: {windows: [shell, shell]}\n")}},
 		"nameless window": {{"a.yaml", []byte("spaces:\n  x: {windows: [{command: nvim}]}\n")}},
 		"bad split":       {{"a.yaml", []byte("spaces:\n  x: {windows: [{name: w, split: diagonal}]}\n")}},

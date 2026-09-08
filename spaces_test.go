@@ -244,18 +244,70 @@ func TestOpenRunsThenWhenTheWindowExists(t *testing.T) {
 	if err := open(d, sp, true, &strings.Builder{}); err != nil {
 		t.Fatal(err)
 	}
+	waitForFile(t, marker)
+	if err := open(d, sp, false, &strings.Builder{}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// waitForFile waits for a `then` command, which runs in the
+// background, to leave its marker.
+func waitForFile(t *testing.T, path string) {
+	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		if _, err := os.Stat(marker); err == nil {
-			break
+		if _, err := os.Stat(path); err == nil {
+			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("then did not run")
+			t.Fatalf("%s did not appear: then did not run", filepath.Base(path))
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	if err := open(d, sp, false, &strings.Builder{}); err != nil {
+}
+
+func TestOpenRunsAProgramInsteadOfASession(t *testing.T) {
+	startTmux(t)
+	root := t.TempDir()
+	marker := filepath.Join(root, "then.ran")
+	sp := Space{Name: "herdr", Key: "h", Space: 7, Cwd: pathList{root}, Command: argv{"sleep", "30"}, Then: "touch " + marker}
+	d := newFakeDesktop()
+	var out strings.Builder
+	if err := open(d, sp, true, &out); err != nil {
 		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "herdr: window spawned") {
+		t.Errorf("output: %q", out.String())
+	}
+	if windowNames("herdr") != nil {
+		t.Error("a tmux session was created for a command space")
+	}
+	want := []string{"spawn herdr cwd=" + filepath.Base(root) + " argv=sleep 30", "move w-herdr -> 7", "focus w-herdr"}
+	if !reflect.DeepEqual(d.calls, want) {
+		t.Errorf("desktop calls = %v, want %v", d.calls, want)
+	}
+	waitForFile(t, marker) // no client to wait for: then ran once the window was up
+
+	d.calls = nil
+	out.Reset()
+	if err := open(d, sp, false, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "herdr: focused") || !reflect.DeepEqual(d.calls, []string{"focus w-herdr"}) {
+		t.Errorf("second open: %q, desktop calls %v", out.String(), d.calls)
+	}
+}
+
+func TestOpenReportsAMissingProgram(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	sp := Space{Name: "ghost", Command: argv{"no-such-program-tmux-spaces"}}
+	d := newFakeDesktop()
+	err := open(d, sp, false, &strings.Builder{})
+	if err == nil || !strings.Contains(err.Error(), "not found on PATH") {
+		t.Errorf("got %v, want the PATH error", err)
+	}
+	if len(d.calls) != 0 {
+		t.Errorf("desktop was touched: %v", d.calls)
 	}
 }
 
@@ -321,13 +373,35 @@ func TestList(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out strings.Builder
-	if err := list([]Space{sp, {Name: "eden", Key: "e", Space: 11, Windows: []Window{{Name: "shell"}}}}, &out); err != nil {
+	if err := list(newFakeDesktop(), []Space{sp, {Name: "eden", Key: "e", Space: 11, Windows: []Window{{Name: "shell"}}}}, &out); err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{"NAME", "bf-1  1    3      2 windows  1⚠", "eden  e    11     -          -"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("list lacks %q:\n%s", want, out.String())
 		}
+	}
+
+	// A command space has no session: the column says whether its
+	// window is up, and "?" where there is no window manager to ask.
+	d := newFakeDesktop()
+	d.present["herdr"] = true
+	commands := []Space{{Name: "herdr", Key: "h", Space: 7, Command: argv{"herdr"}}, {Name: "cmux", Command: argv{"cmux"}}}
+	out.Reset()
+	if err := list(d, commands, &out); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"herdr  h    7      window open  -", "cmux   -    -      -            -"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("list lacks %q:\n%s", want, out.String())
+		}
+	}
+	out.Reset()
+	if err := list(nil, commands, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "herdr  h    7      ?") {
+		t.Errorf("list without a desktop:\n%s", out.String())
 	}
 }
 
@@ -363,24 +437,27 @@ func TestCheck(t *testing.T) {
 		{Name: "b", Space: 9, Cwd: pathList{dir}, Windows: shell},
 		{Name: "c", Cwd: pathList{missing}, Windows: shell},
 		{Name: "d", Space: 2, Cwd: pathList{dir}, Windows: shell},
+		{Name: "e", Command: argv{"no-such-program-tmux-spaces", "--flag"}},
+		{Name: "f", Cwd: pathList{dir}, Command: argv{"sh"}},
 	}
 	var out strings.Builder
 	err := check(d, spaces, &out)
 	for _, want := range []string{
 		"error: b: desktop space 9 does not exist (this desktop has 1..3)",
 		"error: c: none of cwd [" + missing + "] exists",
+		"error: e: command \"no-such-program-tmux-spaces\" not found on PATH",
 		"warning: desktop space 2 is claimed by a, d",
 	} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("check output lacks %q:\n%s", want, out.String())
 		}
 	}
-	for _, fine := range []string{"error: a:", "error: d:"} {
+	for _, fine := range []string{"error: a:", "error: d:", "error: f:"} {
 		if strings.Contains(out.String(), fine) {
 			t.Errorf("check output has %q, which is not a problem:\n%s", fine, out.String())
 		}
 	}
-	if err == nil || err.Error() != "2 problem(s)" {
-		t.Errorf("check returned %v, want 2 problem(s)", err)
+	if err == nil || err.Error() != "3 problem(s)" {
+		t.Errorf("check returned %v, want 3 problem(s)", err)
 	}
 }

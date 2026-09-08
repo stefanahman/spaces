@@ -19,19 +19,26 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// Space is one workspace: a tmux session with a fixed layout, shown in
-// a terminal window pinned to a desktop space, reachable by a key.
+// Space is one workspace: a terminal window pinned to a desktop space,
+// reachable by a key. It shows a tmux session with a fixed layout
+// (windows), or runs one program directly (command) — for programs
+// that are multiplexers themselves, like herdr.
 type Space struct {
 	Name    string   `yaml:"-"`
 	Key     string   `yaml:"key"`
 	Space   int      `yaml:"space"` // desktop space; 0 = not pinned
 	Cwd     pathList `yaml:"cwd"`
 	Windows []Window `yaml:"windows"`
-	Select  string   `yaml:"select"` // window selected when the session is created; default: the first
-	Then    string   `yaml:"then"`   // run inside the session after `open` has focused it
+	Command argv     `yaml:"command"` // runs in the terminal instead of a tmux session
+	Select  string   `yaml:"select"`  // window selected when the session is created; default: the first
+	Then    string   `yaml:"then"`    // run after `open` has focused the space
 
 	file string // where it was declared, for error messages
 }
+
+// isCommand reports whether the space runs its command in the terminal
+// itself, with no tmux session.
+func (sp Space) isCommand() bool { return len(sp.Command) > 0 }
 
 // Window is a tmux window of a space. In YAML a bare string is a
 // window of that name running the shell.
@@ -86,6 +93,28 @@ func (p *pathList) UnmarshalYAML(n *yaml.Node) error {
 		return err
 	}
 	*p = list
+	return nil
+}
+
+// argv is a command line: a string, split on whitespace, or a list for
+// when an argument contains a space. No shell is involved either way:
+// the program is resolved on PATH and run with these arguments.
+type argv []string
+
+func (a *argv) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind == yaml.ScalarNode {
+		var s string
+		if err := n.Decode(&s); err != nil {
+			return err
+		}
+		*a = strings.Fields(s)
+		return nil
+	}
+	var list []string
+	if err := n.Decode(&list); err != nil {
+		return err
+	}
+	*a = list
 	return nil
 }
 
@@ -230,8 +259,15 @@ func (sp Space) validate() error {
 	if sp.Space < 0 {
 		return fmt.Errorf("space must be a positive number, got %d", sp.Space)
 	}
-	if len(sp.Windows) == 0 {
-		return errors.New("at least one window is required")
+	switch {
+	case len(sp.Windows) == 0 && !sp.isCommand():
+		return errors.New("windows or command is required")
+	case len(sp.Windows) > 0 && sp.isCommand():
+		return errors.New("windows and command are exclusive: a space shows a tmux session or runs a program")
+	case sp.isCommand() && sp.Command[0] == "":
+		return errors.New("command names no program")
+	case sp.isCommand() && sp.Select != "":
+		return errors.New("select picks a window; a command space has none")
 	}
 	seen := map[string]bool{}
 	for i, w := range sp.Windows {

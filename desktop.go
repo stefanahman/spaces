@@ -1,6 +1,6 @@
 // The desktop side of a space: the terminal window that shows the
-// session, and the window manager that pins it to a space and focuses
-// it. One implementation today (yabai + Ghostty on macOS); the
+// session or runs the program, and the window manager that pins it to
+// a space and focuses it. One implementation today (yabai + Ghostty on macOS); the
 // interface is the seam for others (Hyprland + a terminal on Linux).
 package main
 

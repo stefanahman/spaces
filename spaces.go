@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -17,13 +18,17 @@ import (
 
 // open brings a space up: session and windows, terminal window on its
 // desktop space, focus — and, with then, the space's `then` command
-// once a client is attached.
+// once a client is attached. A command space has no session: see
+// openCommand.
 func open(d desktop, sp Space, then bool, out io.Writer) error {
 	unlock, err := lockSpace(sp.Name)
 	if err != nil {
 		return err
 	}
 	defer unlock()
+	if sp.isCommand() {
+		return openCommand(d, sp, then, out)
+	}
 	created, err := ensureSession(sp)
 	if err != nil {
 		return err
@@ -56,6 +61,45 @@ func open(d desktop, sp Space, then bool, out io.Writer) error {
 		return fmt.Errorf("%s: no client attached within 3s, not running then", sp.Name)
 	}
 	return runThen(sp)
+}
+
+// openCommand brings a command space up: its terminal window running
+// the program, on its desktop space, focused — and, with then, the
+// space's `then` command. There is no client to wait for: then runs
+// once the window is in front. Nor is there one to ask whether the
+// space is up while the window manager can't see its window, so a
+// hidden window (a locked screen) is spawned again.
+func openCommand(d desktop, sp Space, then bool, out io.Writer) error {
+	program, err := exec.LookPath(sp.Command[0])
+	if err != nil {
+		return fmt.Errorf("%s: %s not found on PATH", sp.Name, sp.Command[0])
+	}
+	argv := append([]string{program}, sp.Command[1:]...)
+	spawned, err := ensureWindow(d, sp, argv, func() bool { return false })
+	if err != nil {
+		return err
+	}
+	if spawned {
+		fmt.Fprintf(out, "%s: window spawned\n", sp.Name)
+	} else {
+		fmt.Fprintf(out, "%s: focused\n", sp.Name)
+	}
+	if !then || sp.Then == "" {
+		return nil
+	}
+	return runThenCommand(sp)
+}
+
+// runThenCommand runs a command space's `then` through the shell, in
+// the background like runThen. Its output goes where tmux-spaces's
+// does: there is no session for tmux to show it in.
+func runThenCommand(sp Space) error {
+	cmd := exec.Command("/bin/sh", "-c", sp.Then)
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("%s: then: %w", sp.Name, err)
+	}
+	return cmd.Process.Release()
 }
 
 // lockSpace serialises open per space. Two opens of the same space at
@@ -97,15 +141,15 @@ func lockDir() (string, error) {
 	return filepath.Join(base, "tmux-spaces"), nil
 }
 
-// list prints every space with its session state and, when the
-// windows carry tmux-claude-status's @claude-state option, what Claude
-// is doing there.
+// list prints every space with its session state (for a command space:
+// whether its window is open) and, when the windows carry
+// tmux-claude-status's @claude-state option, what Claude is doing there.
 //
 // The formats are `:`-separated, with the name last: a tmux client
 // outside a UTF-8 locale (a hotkey daemon's environment) prints
 // control characters in command output as `_`, so a tab would not
 // survive, while `:` can't appear in a session name.
-func list(spaces []Space, out io.Writer) error {
+func list(d desktop, spaces []Space, out io.Writer) error {
 	sessions := map[string]sessionInfo{}
 	if outStr, err := tmux("list-sessions", "-F", "#{session_attached}:#{session_windows}:#{session_name}"); err == nil {
 		for _, line := range strings.Split(outStr, "\n") {
@@ -150,7 +194,9 @@ func list(spaces []Space, out io.Writer) error {
 			key = sp.Key
 		}
 		session := "-"
-		if s, ok := sessions[sp.Name]; ok {
+		if sp.isCommand() {
+			session = windowState(d, sp.Name)
+		} else if s, ok := sessions[sp.Name]; ok {
 			session = fmt.Sprintf("%d windows", s.windows)
 			if s.attached {
 				session += ", attached"
@@ -164,6 +210,24 @@ func list(spaces []Space, out io.Writer) error {
 type sessionInfo struct {
 	attached bool
 	windows  int
+}
+
+// windowState is a command space's counterpart of the session column:
+// whether its terminal window is up. "?" when the window manager can't
+// be asked (no desktop backend on this OS).
+func windowState(d desktop, name string) string {
+	if d == nil {
+		return "?"
+	}
+	id, err := d.findWindow(name)
+	switch {
+	case err != nil:
+		return "?"
+	case id != "":
+		return "window open"
+	default:
+		return "-"
+	}
 }
 
 // claudeChip renders state counts the way tmux-claude-status does:
@@ -200,9 +264,9 @@ func yabaiRules(spaces []Space, out io.Writer) {
 }
 
 // check reports what would stop a space from opening on this machine:
-// missing directories, desktop spaces that don't exist, duplicate
-// desktop spaces, missing tools. Exit status 1 when anything is wrong;
-// warnings alone pass.
+// missing directories, a command not on PATH, desktop spaces that don't
+// exist, duplicate desktop spaces, missing tools. Exit status 1 when
+// anything is wrong; warnings alone pass.
 func check(d desktop, spaces []Space, out io.Writer) error {
 	problems := 0
 	files, _ := configFiles()
@@ -211,6 +275,12 @@ func check(d desktop, spaces []Space, out io.Writer) error {
 		if len(sp.Cwd) > 0 {
 			if _, ok := sp.Cwd.resolve(); !ok {
 				fmt.Fprintf(out, "error: %s: none of cwd %v exists\n", sp.Name, sp.Cwd)
+				problems++
+			}
+		}
+		if sp.isCommand() {
+			if _, err := exec.LookPath(sp.Command[0]); err != nil {
+				fmt.Fprintf(out, "error: %s: command %q not found on PATH\n", sp.Name, sp.Command[0])
 				problems++
 			}
 		}

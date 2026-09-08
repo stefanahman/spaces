@@ -23,7 +23,7 @@ func TestCLI(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "tmux-spaces", "spaces.d"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "tmux-spaces", "spaces.d", "a.yaml"), []byte("spaces:\n  app: {key: a, space: 3, windows: [shell]}\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "tmux-spaces", "spaces.d", "a.yaml"), []byte("spaces:\n  app: {key: a, space: 3, windows: [shell]}\n  herdr: {key: h, space: 7, command: herdr --session work}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	run := func(args ...string) (string, int) {
@@ -49,6 +49,7 @@ func TestCLI(t *testing.T) {
 		{[]string{"--version"}, 0, "tmux-spaces"},
 		{[]string{"config", "path"}, 0, filepath.Join(root, "tmux-spaces")},
 		{[]string{"yabai-rules"}, 0, `yabai -m rule --add app="^Ghostty$" title="^app$" space=^3`},
+		{[]string{"yabai-rules"}, 0, `yabai -m rule --add app="^Ghostty$" title="^herdr$" space=^7`},
 		{[]string{"key", "z"}, 1, `no space bound to key "z"`},
 		{[]string{"open", "nope"}, 1, `no space named "nope"`},
 	}
