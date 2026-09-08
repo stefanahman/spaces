@@ -41,10 +41,11 @@ var (
 )
 
 // render builds the space's workspaces in its multiplexer and shows
-// the selected one. What exists is kept: workspaces are found by name,
-// tabs and panes by position in the layout, and a command is typed
-// only into a pane that runs nothing but its shell.
-func render(d mux.Driver, sp Space, out, errOut io.Writer) error {
+// the selected one — selectWS when given (a key on that workspace),
+// the space's `select` otherwise. What exists is kept: workspaces are
+// found by name, tabs and panes by position in the layout, and a
+// command is typed only into a pane that runs nothing but its shell.
+func render(d mux.Driver, sp Space, selectWS string, out, errOut io.Writer) error {
 	if err := waitForPing(d, pingTimeout); err != nil {
 		return fmt.Errorf("%s: %s: %w", sp.Name, sp.Multiplexer, err)
 	}
@@ -75,9 +76,12 @@ func render(d mux.Driver, sp Space, out, errOut io.Writer) error {
 			return err
 		}
 	}
-	if sp.Select != "" {
-		if err := d.Select(byName[sp.Select]); err != nil {
-			return fmt.Errorf("%s: select %s: %w", sp.Name, sp.Select, err)
+	if selectWS == "" {
+		selectWS = sp.Select
+	}
+	if selectWS != "" {
+		if err := d.Select(byName[selectWS]); err != nil {
+			return fmt.Errorf("%s: select %s: %w", sp.Name, selectWS, err)
 		}
 	}
 	switch {

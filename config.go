@@ -48,6 +48,7 @@ type Space struct {
 // directory and its windows — tabs there — with the panes of each.
 // The first window is the pane the workspace is created with.
 type Workspace struct {
+	Key     string   `yaml:"key"` // one of 0-9 a-z: `spaces key <k>` opens the space on this workspace
 	Cwd     pathList `yaml:"cwd"`
 	Windows []Window `yaml:"windows"`
 }
@@ -65,6 +66,18 @@ func (sp Space) workspaceNames() []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// workspaceKeys lists the keys bound to the space's workspaces, sorted.
+func (sp Space) workspaceKeys() []string {
+	var keys []string
+	for _, ws := range sp.Workspaces {
+		if ws.Key != "" {
+			keys = append(keys, ws.Key)
+		}
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // envList renders env as KEY=VALUE entries, values expanded like paths
@@ -252,11 +265,24 @@ type source struct {
 	data []byte
 }
 
-// mergeSpaces parses each source and merges them, rejecting a name or
-// key declared twice. The result is sorted by name.
+// mergeSpaces parses each source and merges them, rejecting a name
+// declared twice, or a key bound twice within one multiplexer — a
+// space's own key lives in its realm, a workspace's in the space's
+// multiplexer, so bf-1 can be key 1 as a tmux space, a herdr
+// workspace and a cmux workspace at once. The result is sorted by name.
 func mergeSpaces(sources []source) ([]Space, error) {
 	byName := map[string]Space{}
-	byKey := map[string]string{}
+	byKey := map[string]map[string]string{} // realm → key → holder
+	bind := func(realm, key string, holder keyHolder) error {
+		if byKey[realm] == nil {
+			byKey[realm] = map[string]string{}
+		}
+		if other, dup := byKey[realm][key]; dup {
+			return fmt.Errorf("key %q is bound to both %s and %s", key, other, holder)
+		}
+		byKey[realm][key] = holder.String()
+		return nil
+	}
 	for _, src := range sources {
 		var file struct {
 			Spaces map[string]Space `yaml:"spaces"`
@@ -283,10 +309,16 @@ func mergeSpaces(sources []source) ([]Space, error) {
 				return nil, fmt.Errorf("%s: space %q: %w", src.name, name, err)
 			}
 			if sp.Key != "" {
-				if other, dup := byKey[sp.Key]; dup {
-					return nil, fmt.Errorf("key %q is bound to both %q and %q", sp.Key, other, name)
+				if err := bind(sp.realm(), sp.Key, keyHolder{space: sp}); err != nil {
+					return nil, err
 				}
-				byKey[sp.Key] = name
+			}
+			for _, wsName := range sp.workspaceNames() {
+				if key := sp.Workspaces[wsName].Key; key != "" {
+					if err := bind(sp.Multiplexer, key, keyHolder{space: sp, workspace: wsName}); err != nil {
+						return nil, err
+					}
+				}
 			}
 			byName[name] = sp
 		}
@@ -297,6 +329,12 @@ func mergeSpaces(sources []source) ([]Space, error) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
+}
+
+// validKey is what a space or a workspace may be bound to: nothing,
+// or one of 0-9 a-z.
+func validKey(key string) bool {
+	return key == "" || (len(key) == 1 && strings.ContainsAny(key, "0123456789abcdefghijklmnopqrstuvwxyz"))
 }
 
 // validName is what a space or a window may be called. A name becomes
@@ -320,7 +358,7 @@ func (sp Space) validate() error {
 	if !validName.MatchString(sp.Name) {
 		return fmt.Errorf("name %q: only letters, digits, - and _ are allowed (it is the tmux session name and the window's title)", sp.Name)
 	}
-	if sp.Key != "" && (len(sp.Key) != 1 || !strings.ContainsAny(sp.Key, "0123456789abcdefghijklmnopqrstuvwxyz")) {
+	if !validKey(sp.Key) {
 		return fmt.Errorf("key %q must be one of 0-9 a-z", sp.Key)
 	}
 	if sp.Space < 0 {
@@ -373,6 +411,9 @@ func (sp Space) validate() error {
 		if !validName.MatchString(name) {
 			return fmt.Errorf("workspace %q: only letters, digits, - and _ are allowed", name)
 		}
+		if !validKey(sp.Workspaces[name].Key) {
+			return fmt.Errorf("workspace %q: key %q must be one of 0-9 a-z", name, sp.Workspaces[name].Key)
+		}
 		if _, err := validateWindows(sp.Workspaces[name].Windows); err != nil {
 			return fmt.Errorf("workspace %q: %w", name, err)
 		}
@@ -418,16 +459,6 @@ func validateWindows(windows []Window) (map[string]bool, error) {
 func find(spaces []Space, name string) (Space, bool) {
 	for _, sp := range spaces {
 		if sp.Name == name {
-			return sp, true
-		}
-	}
-	return Space{}, false
-}
-
-// findKey returns the space bound to key.
-func findKey(spaces []Space, key string) (Space, bool) {
-	for _, sp := range spaces {
-		if sp.Key == key {
 			return sp, true
 		}
 	}

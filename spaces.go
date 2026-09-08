@@ -27,6 +27,12 @@ var yabaiRegex = strings.NewReplacer(`.`, `\.`, `(`, `\(`, `)`, `\)`)
 // once a client is attached. A command space has no session, and an
 // app space no terminal: see openCommand and openApp.
 func open(d desktop, sp Space, then bool, out io.Writer) error {
+	return openSpace(d, sp, then, "", out)
+}
+
+// openSpace is open with a say in which workspace a herdr or cmux
+// space shows: selectWS, when a key on that workspace was pressed.
+func openSpace(d desktop, sp Space, then bool, selectWS string, out io.Writer) error {
 	unlock, err := lockSpace(sp.Name)
 	if err != nil {
 		return err
@@ -34,9 +40,9 @@ func open(d desktop, sp Space, then bool, out io.Writer) error {
 	defer unlock()
 	switch {
 	case sp.isCommand():
-		return openCommand(d, sp, then, out)
+		return openCommand(d, sp, then, selectWS, out)
 	case sp.isApp():
-		return openApp(d, sp, then, out)
+		return openApp(d, sp, then, selectWS, out)
 	}
 	created, err := ensureSession(sp)
 	if err != nil {
@@ -78,7 +84,7 @@ func open(d desktop, sp Space, then bool, out io.Writer) error {
 // once the window is in front. Nor is there one to ask whether the
 // space is up while the window manager can't see its window, so a
 // hidden window (a locked screen) is spawned again.
-func openCommand(d desktop, sp Space, then bool, out io.Writer) error {
+func openCommand(d desktop, sp Space, then bool, selectWS string, out io.Writer) error {
 	program, err := exec.LookPath(sp.Command[0])
 	if err != nil {
 		return fmt.Errorf("%s: %s not found on PATH", sp.Name, sp.Command[0])
@@ -89,11 +95,11 @@ func openCommand(d desktop, sp Space, then bool, out io.Writer) error {
 		return err
 	}
 	if spawned {
-		fmt.Fprintf(out, "%s: window spawned\n", sp.Name)
+		fmt.Fprintf(out, "%s: window spawned%s\n", sp.Name, selected(selectWS))
 	} else {
-		fmt.Fprintf(out, "%s: focused\n", sp.Name)
+		fmt.Fprintf(out, "%s: focused%s\n", sp.Name, selected(selectWS))
 	}
-	if err := renderWorkspaces(sp, out); err != nil {
+	if err := renderWorkspaces(sp, selectWS, out); err != nil {
 		return err
 	}
 	if !then || sp.Then == "" {
@@ -103,12 +109,22 @@ func openCommand(d desktop, sp Space, then bool, out io.Writer) error {
 }
 
 // renderWorkspaces builds the space's workspaces, when it declares
-// any, in the multiplexer the window runs.
-func renderWorkspaces(sp Space, out io.Writer) error {
+// any, in the multiplexer the window runs, and shows selectWS when
+// given.
+func renderWorkspaces(sp Space, selectWS string, out io.Writer) error {
 	if !sp.hasWorkspaces() {
 		return nil
 	}
-	return render(newDriver(sp), sp, out, os.Stderr)
+	return render(newDriver(sp), sp, selectWS, out, os.Stderr)
+}
+
+// selected names the workspace a key press lands on, for the status
+// line; nothing for a plain open.
+func selected(selectWS string) string {
+	if selectWS == "" {
+		return ""
+	}
+	return "; " + selectWS + " selected"
 }
 
 // openApp brings an app space up: the application's window on its
@@ -118,7 +134,7 @@ func renderWorkspaces(sp Space, out io.Writer) error {
 // to ask about a window the window manager can't see. macOS keeps an
 // application alive with no windows: `open -a` then activates it,
 // which reopens one for most apps, and the wait covers that too.
-func openApp(d desktop, sp Space, then bool, out io.Writer) error {
+func openApp(d desktop, sp Space, then bool, selectWS string, out io.Writer) error {
 	id, err := d.findAppWindow(sp.App)
 	if err != nil {
 		return err
@@ -142,11 +158,11 @@ func openApp(d desktop, sp Space, then bool, out io.Writer) error {
 		return err
 	}
 	if launched {
-		fmt.Fprintf(out, "%s: app launched\n", sp.Name)
+		fmt.Fprintf(out, "%s: app launched%s\n", sp.Name, selected(selectWS))
 	} else {
-		fmt.Fprintf(out, "%s: focused\n", sp.Name)
+		fmt.Fprintf(out, "%s: focused%s\n", sp.Name, selected(selectWS))
 	}
-	if err := renderWorkspaces(sp, out); err != nil {
+	if err := renderWorkspaces(sp, selectWS, out); err != nil {
 		return err
 	}
 	if !then || sp.Then == "" {
@@ -206,9 +222,10 @@ func lockDir() (string, error) {
 	return filepath.Join(base, "spaces"), nil
 }
 
-// list prints every space with its session state (for a command or
-// app space: whether its window is open, and for one with workspaces
-// how many of them exist) and, when the windows carry
+// list prints the active multiplexer, then every space with its keys
+// (its own, and its workspaces' in brackets), its session state (for
+// a command or app space: whether its window is open, and for one with
+// workspaces how many of them exist) and, when the windows carry
 // tmux-claude-status's @claude-state option, what Claude is doing there.
 //
 // The formats are `:`-separated, with the name last: a tmux client
@@ -216,6 +233,11 @@ func lockDir() (string, error) {
 // control characters in command output as `_`, so a tab would not
 // survive, while `:` can't appear in a session name.
 func list(d desktop, spaces []Space, out io.Writer) error {
+	active, err := activeMultiplexer()
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "multiplexer: %s\n", active)
 	sessions := map[string]sessionInfo{}
 	if outStr, err := tmux("list-sessions", "-F", "#{session_attached}:#{session_windows}:#{session_name}"); err == nil {
 		for _, line := range strings.Split(outStr, "\n") {
@@ -258,6 +280,9 @@ func list(d desktop, spaces []Space, out io.Writer) error {
 		}
 		if sp.Key != "" {
 			key = sp.Key
+		}
+		if keys := sp.workspaceKeys(); len(keys) > 0 {
+			key += " (" + strings.Join(keys, " ") + ")"
 		}
 		session := "-"
 		switch {

@@ -92,11 +92,11 @@ spaces:
 	if len(eden.Windows[0].Panes) != 2 || eden.Windows[0].Panes[1].Command != "nvim" || eden.Select != "nvim" {
 		t.Errorf("eden = %+v", eden)
 	}
-	if sp, ok := findKey(spaces, "e"); !ok || sp.Name != "eden" {
-		t.Errorf("findKey(e) = %+v, %v", sp, ok)
+	if h, err := resolveKey(spaces, "e", "tmux"); err != nil || h.space.Name != "eden" || h.workspace != "" {
+		t.Errorf("resolveKey(e) = %+v, %v", h, err)
 	}
-	if _, ok := findKey(spaces, "z"); ok {
-		t.Error("findKey(z) should miss")
+	if _, err := resolveKey(spaces, "z", "tmux"); err == nil || !strings.Contains(err.Error(), `no space bound to key "z"`) {
+		t.Errorf("resolveKey(z): %v", err)
 	}
 }
 

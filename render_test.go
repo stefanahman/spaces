@@ -66,7 +66,7 @@ func TestRenderOnHerdr(t *testing.T) {
 	workspaces, dirs := workContext(t, "herdr")
 	sp := Space{Name: "herdr", Command: argv{"herdr"}, Multiplexer: "herdr", Workspaces: workspaces, Select: "pr-owl"}
 	var out, errOut strings.Builder
-	if err := render(d, sp, &out, &errOut); err != nil {
+	if err := render(d, sp, "", &out, &errOut); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "herdr: 3 workspaces created") || errOut.Len() > 0 {
@@ -108,7 +108,7 @@ func TestRenderOnHerdr(t *testing.T) {
 	fake.SetForeground(owl.Pane(), "pr-owl")
 	typed := len(fake.Typed(bf.Panes[1])) + len(fake.Typed(eden.Panes[2])) + len(fake.Typed(owl.Pane()))
 	out.Reset()
-	if err := render(d, sp, &out, &errOut); err != nil {
+	if err := render(d, sp, "", &out, &errOut); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "herdr: 3 workspaces in place") || errOut.Len() > 0 {
@@ -123,7 +123,7 @@ func TestRenderOnHerdr(t *testing.T) {
 
 	// pr-owl exited and vim runs in its pane: left alone, and said so.
 	fake.SetForeground(owl.Pane(), "vim")
-	if err := render(d, sp, &out, &errOut); err != nil {
+	if err := render(d, sp, "", &out, &errOut); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(errOut.String(), "herdr: workspace pr-owl window pr-owl is running vim, not pr-owl; leaving it alone") {
@@ -142,7 +142,7 @@ func TestRenderOnCmux(t *testing.T) {
 	workspaces, dirs := workContext(t, "cmux")
 	sp := Space{Name: "cmux", App: "cmux", Multiplexer: "cmux", Workspaces: workspaces, Select: "pr-owl"}
 	var out, errOut strings.Builder
-	if err := render(d, sp, &out, &errOut); err != nil {
+	if err := render(d, sp, "", &out, &errOut); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "cmux: 3 workspaces created") || errOut.Len() > 0 {
@@ -181,7 +181,7 @@ func TestRenderOnCmux(t *testing.T) {
 	fake.SetTop("pr-owl", nil, []string{"pr-owl", "zsh"})
 	typed := len(fake.Typed(nvimTab)) + len(fake.Typed(root))
 	out.Reset()
-	if err := render(d, sp, &out, &errOut); err != nil {
+	if err := render(d, sp, "", &out, &errOut); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "cmux: 3 workspaces in place") || errOut.Len() > 0 {
@@ -194,7 +194,7 @@ func TestRenderOnCmux(t *testing.T) {
 		t.Errorf("second render added surfaces: %+v", bf.Panes)
 	}
 	fake.SetTop("pr-owl", nil, []string{"vim", "zsh"})
-	if err := render(d, sp, &out, &errOut); err != nil {
+	if err := render(d, sp, "", &out, &errOut); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(errOut.String(), "cmux: workspace pr-owl window pr-owl is running vim, not pr-owl; leaving it alone") {
@@ -206,7 +206,7 @@ func TestRenderWaitsForTheMultiplexer(t *testing.T) {
 	quick(t)
 	pingTimeout = 300 * time.Millisecond
 	sp := Space{Name: "herdr", Command: argv{"herdr"}, Multiplexer: "herdr", Workspaces: map[string]Workspace{"x": {}}}
-	err := render(mux.NewHerdr("/nonexistent/herdr.sock"), sp, &strings.Builder{}, &strings.Builder{})
+	err := render(mux.NewHerdr("/nonexistent/herdr.sock"), sp, "", &strings.Builder{}, &strings.Builder{})
 	if err == nil || !strings.Contains(err.Error(), "herdr: not answering after 300ms") {
 		t.Errorf("got %v", err)
 	}
@@ -216,7 +216,7 @@ func TestRenderReportsAMissingCwd(t *testing.T) {
 	quick(t)
 	fake := muxtest.NewFakeHerdr(t)
 	sp := Space{Name: "herdr", Command: argv{"herdr"}, Multiplexer: "herdr", Workspaces: map[string]Workspace{"x": {Cwd: pathList{"/nonexistent/one"}}}}
-	err := render(mux.NewHerdr(fake.Socket()), sp, &strings.Builder{}, &strings.Builder{})
+	err := render(mux.NewHerdr(fake.Socket()), sp, "", &strings.Builder{}, &strings.Builder{})
 	if err == nil || !strings.Contains(err.Error(), "herdr: workspace x: none of cwd [/nonexistent/one] exists") {
 		t.Errorf("got %v", err)
 	}

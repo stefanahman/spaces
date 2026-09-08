@@ -34,7 +34,7 @@ func versionString() string {
 
 const usage = `usage: spaces open <name>    bring the space up (its session or program in a terminal window, or its application), focus it, build its workspaces, run its then command
        spaces focus <name>   same, without the then command
-       spaces key <k>        open the space bound to key k
+       spaces key <k>        open what key k is bound to: a space, or a herdr/cmux space on one of its workspaces; the active multiplexer decides when several are
        spaces list           every space with its session (or window) and Claude state
        spaces use [tmux|herdr|cmux]   pick, or set, the active multiplexer: where a key bound in several of them lands
        spaces yabai-rules    the yabai rules that pin the windows to their spaces (eval in yabairc)
@@ -107,13 +107,9 @@ func main() {
 		if len(args) != 2 {
 			exitOn(usageError("key: expected a key"))
 		}
-		sp, ok := findKey(spaces, args[1])
-		if !ok {
-			exitOn(fmt.Errorf("no space bound to key %q", args[1]))
-		}
 		d, err := newDesktop()
 		exitOn(err)
-		exitOn(open(d, sp, true, os.Stdout))
+		exitOn(keyCmd(d, spaces, args[1], os.Stdout))
 	case "list":
 		d, _ := newDesktop() // nil off macOS: list still works, command spaces show "?"
 		exitOn(list(d, spaces, os.Stdout))
