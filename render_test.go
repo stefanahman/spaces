@@ -51,9 +51,9 @@ func workContext(t *testing.T, muxKind string) (map[string]Workspace, map[string
 // running something else is left alone without the grace period.
 func quick(t *testing.T) {
 	t.Helper()
-	ping, idle := pingTimeout, idleTimeout
-	pingTimeout, idleTimeout = time.Second, 0
-	t.Cleanup(func() { pingTimeout, idleTimeout = ping, idle })
+	ping := pingTimeout
+	pingTimeout = time.Second
+	t.Cleanup(func() { pingTimeout = ping })
 }
 
 func TestRenderOnHerdr(t *testing.T) {
@@ -175,10 +175,13 @@ func TestRenderOnCmux(t *testing.T) {
 		t.Errorf("selected %q, want pr-owl %q", fake.State().Selected, owl.ID)
 	}
 
-	// The programs run now — as cmux reports them, per pane.
-	fake.SetTop("bf-1", nil, []string{"nvim", "zsh"})
-	fake.SetTop("eden", nil, []string{"nvim", "zsh"})
-	fake.SetTop("pr-owl", nil, []string{"pr-owl", "zsh"})
+	// The programs run now — as cmux tells: ps on the tty of the
+	// surface a workspace was created with, the title of a tab made
+	// through the API.
+	fake.SetTitle(nvimTab, "nvim")
+	edenWS, _ := fake.Workspace("eden")
+	fake.SetTitle(edenWS.Panes[0].Surfaces[1].ID, "cd /x/eden-private-branches && nvim")
+	fake.SetForeground(owl.Panes[0].Surfaces[0].TTY, "-/bin/zsh", "/x/bin/pr-owl")
 	typed := len(fake.Typed(nvimTab)) + len(fake.Typed(root))
 	out.Reset()
 	if err := render(d, sp, "", &out, &errOut); err != nil {
@@ -193,7 +196,7 @@ func TestRenderOnCmux(t *testing.T) {
 	if bf, _ := fake.Workspace("bf-1"); len(bf.Panes[0].Surfaces) != 2 {
 		t.Errorf("second render added surfaces: %+v", bf.Panes)
 	}
-	fake.SetTop("pr-owl", nil, []string{"vim", "zsh"})
+	fake.SetForeground(owl.Panes[0].Surfaces[0].TTY, "-/bin/zsh", "vim")
 	if err := render(d, sp, "", &out, &errOut); err != nil {
 		t.Fatal(err)
 	}
