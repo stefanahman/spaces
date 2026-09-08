@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/creack/pty"
+	"github.com/stefanahman/mux"
 )
 
 // unsetenv removes a variable for the rest of the test; t.Setenv can
@@ -497,6 +498,7 @@ func TestLockSpaceSerialises(t *testing.T) {
 
 func TestCheck(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir()) // no config files of the developer's
+	stubDrivers(t, func(kind, _ string) error { return errors.New(kind + ": not running") })
 	d := newFakeDesktop()
 	d.indexes = []int{1, 2, 3}
 	dir := t.TempDir()
@@ -540,5 +542,70 @@ func TestCheck(t *testing.T) {
 	}
 	if err == nil || err.Error() != "6 problem(s)" {
 		t.Errorf("check returned %v, want 6 problem(s)", err)
+	}
+}
+
+// pingDriver is a multiplexer that only answers Ping — all `check`
+// asks of one.
+type pingDriver struct {
+	mux.Driver
+	err error
+}
+
+func (p pingDriver) Ping() error { return p.err }
+
+// stubDrivers makes every multiplexer answer Ping with what ping says
+// of its kind and session, for the test's duration.
+func stubDrivers(t *testing.T, ping func(kind, session string) error) {
+	t.Helper()
+	real := newDriver
+	newDriver = func(kind, session string) mux.Driver { return pingDriver{err: ping(kind, session)} }
+	t.Cleanup(func() { newDriver = real })
+}
+
+// check audits tmux and each herdr session and cmux the spaces
+// declare, once each: a multiplexer started with the wrong
+// environment is a problem, one that isn't running is not.
+func TestCheckAuditsMultiplexers(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	var asked []string
+	stubDrivers(t, func(kind, session string) error {
+		asked = append(asked, strings.TrimSpace(kind+" "+session))
+		switch kind {
+		case "tmux":
+			return errors.New("tmux: the server was started from inside a Claude Code session (CLAUDECODE): agents started in it run as child sessions and save no transcript; restart it from a hotkey or a plain shell")
+		case "cmux":
+			return errors.New("cmux: the app was launched with TMUX in its environment (from a shell inside tmux): its shell integration hands CMUX_SURFACE_ID to tmux before every command and the Claude Code hooks never engage; relaunch cmux from a hotkey or Spotlight")
+		}
+		return errors.New("dial unix /nowhere/herdr.sock: connect: no such file or directory")
+	})
+	d := newFakeDesktop()
+	d.indexes = []int{1, 2, 3}
+	dir := t.TempDir()
+	ws := map[string]Workspace{"w": {Cwd: pathList{dir}}}
+	spaces := []Space{
+		{Name: "a", Space: 1, Cwd: pathList{dir}, Windows: []Window{{Name: "shell"}}},
+		{Name: "h", Space: 2, Command: argv{"sh"}, Multiplexer: "herdr", Session: "work", Workspaces: ws},
+		{Name: "c", Space: 3, Command: argv{"sh"}, Multiplexer: "cmux", Workspaces: ws},
+		{Name: "c2", Command: argv{"sh"}, Multiplexer: "cmux", Workspaces: ws},
+	}
+	var out strings.Builder
+	err := check(d, spaces, &out)
+	if want := []string{"tmux", "herdr work", "cmux"}; !reflect.DeepEqual(asked, want) {
+		t.Errorf("asked %v, want %v", asked, want)
+	}
+	for _, want := range []string{
+		"error: tmux: the server was started from inside a Claude Code session (CLAUDECODE): agents started in it run as child sessions",
+		"error: cmux: the app was launched with TMUX in its environment",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("check output lacks %q:\n%s", want, out.String())
+		}
+	}
+	if strings.Contains(out.String(), "herdr") {
+		t.Errorf("check reports the herdr that isn't running:\n%s", out.String())
+	}
+	if err == nil || err.Error() != "2 problem(s)" {
+		t.Errorf("check returned %v, want 2 problem(s)", err)
 	}
 }

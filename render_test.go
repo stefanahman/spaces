@@ -245,7 +245,7 @@ func TestOpenBuildsTheWorkspaces(t *testing.T) {
 		t.Setenv(v, "")
 	}
 	orig := newDriver
-	newDriver = func(Space) mux.Driver { return mux.NewHerdr(fake.Socket()) }
+	newDriver = func(string, string) mux.Driver { return mux.NewHerdr(fake.Socket()) }
 	t.Cleanup(func() { newDriver = orig })
 	workspaces, _ := workContext(t, "herdr")
 
@@ -279,8 +279,8 @@ func TestListCountsTheWorkspaces(t *testing.T) {
 		t.Setenv(v, "")
 	}
 	orig := newDriver
-	newDriver = func(sp Space) mux.Driver {
-		if sp.Name == "gone" {
+	newDriver = func(_, session string) mux.Driver {
+		if session == "gone" {
 			return mux.NewHerdr("/nonexistent/herdr.sock")
 		}
 		return mux.NewHerdr(fake.Socket())
@@ -298,7 +298,7 @@ func TestListCountsTheWorkspaces(t *testing.T) {
 	d.apps["cmux"] = true
 	spaces := []Space{
 		{Name: "cmux", Key: "c", Space: 8, App: "cmux", Multiplexer: "herdr", Workspaces: workspaces},
-		{Name: "gone", Key: "g", Space: 9, App: "gone", Multiplexer: "herdr", Workspaces: workspaces},
+		{Name: "gone", Key: "g", Space: 9, App: "gone", Multiplexer: "herdr", Session: "gone", Workspaces: workspaces},
 	}
 	var out strings.Builder
 	if err := list(d, spaces, &out); err != nil {

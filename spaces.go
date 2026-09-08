@@ -115,7 +115,7 @@ func renderWorkspaces(sp Space, selectWS string, out io.Writer) error {
 	if !sp.hasWorkspaces() {
 		return nil
 	}
-	return render(newDriver(sp), sp, selectWS, out, os.Stderr)
+	return render(newDriver(sp.Multiplexer, sp.Session), sp, selectWS, out, os.Stderr)
 }
 
 // selected names the workspace a key press lands on, for the status
@@ -302,7 +302,7 @@ func list(d desktop, spaces []Space, out io.Writer) error {
 		}
 		if sp.hasWorkspaces() {
 			have := "?"
-			if n, ok := workspaceCount(newDriver(sp), sp); ok {
+			if n, ok := workspaceCount(newDriver(sp.Multiplexer, sp.Session), sp); ok {
 				have = strconv.Itoa(n)
 			}
 			session += fmt.Sprintf(", %s/%d workspaces", have, len(sp.Workspaces))
@@ -375,8 +375,9 @@ func yabaiRules(spaces []Space, out io.Writer) {
 // check reports what would stop a space from opening on this machine:
 // missing directories, a command not on PATH, an application not
 // installed, desktop spaces that don't exist, duplicate desktop
-// spaces, missing tools. Exit status 1 when anything is wrong;
-// warnings alone pass.
+// spaces, missing tools — and what would spoil the agents in it: a
+// running multiplexer started with the wrong environment. Exit status
+// 1 when anything is wrong; warnings alone pass.
 func check(d desktop, spaces []Space, out io.Writer) error {
 	problems := 0
 	files, _ := configFiles()
@@ -448,6 +449,7 @@ func check(d desktop, spaces []Space, out io.Writer) error {
 			}
 		}
 	}
+	problems += checkMultiplexers(out, spaces)
 	if problems > 0 {
 		return fmt.Errorf("%d problem(s)", problems)
 	}

@@ -16,15 +16,18 @@ import (
 	"github.com/stefanahman/mux"
 )
 
-// newDriver is the multiplexer a space builds its workspaces in. A
+// newDriver is the multiplexer of that kind — the one a space builds
+// its workspaces in, or one `check` audits; session is herdr's. A
 // variable, so tests can put a fake in its place.
-var newDriver = func(sp Space) mux.Driver {
-	switch sp.Multiplexer {
+var newDriver = func(kind, session string) mux.Driver {
+	switch kind {
+	case "tmux":
+		return mux.Tmux{}
 	case "herdr":
 		socket := ""
-		if sp.Session != "" {
+		if session != "" {
 			home, _ := os.UserHomeDir()
-			socket = filepath.Join(home, ".config", "herdr", "sessions", sp.Session, "herdr.sock")
+			socket = filepath.Join(home, ".config", "herdr", "sessions", session, "herdr.sock")
 		}
 		return mux.NewHerdr(socket)
 	case "cmux":
@@ -254,6 +257,39 @@ func programOf(command string) string {
 		return filepath.Base(word)
 	}
 	return command
+}
+
+// checkMultiplexers asks the multiplexers the spaces run in — tmux,
+// and each herdr session and cmux a space declares, once — how they
+// were started, for `check`: a server or app that inherited a Claude
+// Code session's markers runs every agent as a child session, and a
+// cmux launched with TMUX set never engages its hooks (see mux's
+// Ping). Prints each as an error and returns how many. A multiplexer
+// that isn't running, or won't answer, is not a problem here.
+func checkMultiplexers(out io.Writer, spaces []Space) int {
+	drivers := []mux.Driver{newDriver("tmux", "")}
+	seen := map[string]bool{}
+	for _, sp := range spaces {
+		if sp.Multiplexer == "" || seen[sp.Multiplexer+"\x00"+sp.Session] {
+			continue
+		}
+		seen[sp.Multiplexer+"\x00"+sp.Session] = true
+		drivers = append(drivers, newDriver(sp.Multiplexer, sp.Session))
+	}
+	problems := 0
+	for _, d := range drivers {
+		err := d.Ping()
+		if err == nil {
+			continue
+		}
+		// Ping's one error tells "not running" from "running wrong"
+		// only in its words; these are mux's for the latter.
+		if msg := err.Error(); strings.Contains(msg, "child sessions") || strings.Contains(msg, "hooks never engage") {
+			fmt.Fprintf(out, "error: %v\n", err)
+			problems++
+		}
+	}
+	return problems
 }
 
 // workspaceCount is how many of the space's workspaces exist, for
