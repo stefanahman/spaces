@@ -46,6 +46,11 @@ spaces:
     command: herdr --session work
   note:
     command: [sh, -c, "echo hi there"]
+  cmux:
+    key: c
+    space: 8
+    app: cmux
+    then: ~/.local/bin/cmux-setup
 `)},
 	})
 	if err != nil {
@@ -55,7 +60,7 @@ spaces:
 	for _, sp := range spaces {
 		names = append(names, sp.Name)
 	}
-	if want := []string{"bf-1", "eden", "herdr", "note", "pr-reviews", "unpinned"}; !reflect.DeepEqual(names, want) {
+	if want := []string{"bf-1", "cmux", "eden", "herdr", "note", "pr-reviews", "unpinned"}; !reflect.DeepEqual(names, want) {
 		t.Errorf("names = %v, want %v", names, want)
 	}
 	bf, _ := find(spaces, "bf-1")
@@ -67,6 +72,9 @@ spaces:
 	}
 	if note, _ := find(spaces, "note"); !reflect.DeepEqual(note.Command, argv{"sh", "-c", "echo hi there"}) {
 		t.Errorf("note (a list keeps an argument with a space) = %+v", note)
+	}
+	if cmux, _ := find(spaces, "cmux"); !cmux.isApp() || cmux.App != "cmux" || cmux.Key != "c" || cmux.Space != 8 || cmux.Then == "" {
+		t.Errorf("cmux = %+v", cmux)
 	}
 	if want := []Window{{Name: "shell"}, {Name: "nvim", Command: "nvim"}}; !reflect.DeepEqual(bf.Windows, want) {
 		t.Errorf("bf-1 windows = %+v, want %+v", bf.Windows, want)
@@ -104,6 +112,13 @@ func TestMergeSpacesRejects(t *testing.T) {
 		"blank command":   {{"a.yaml", []byte("spaces:\n  x: {command: ' '}\n")}},
 		"blank program":   {{"a.yaml", []byte("spaces:\n  x: {command: ['']}\n")}},
 		"select+command":  {{"a.yaml", []byte("spaces:\n  x: {command: herdr, select: w}\n")}},
+		"app+windows":     {{"a.yaml", []byte("spaces:\n  x: {app: Slack, windows: [shell]}\n")}},
+		"app+command":     {{"a.yaml", []byte("spaces:\n  x: {app: Slack, command: slack}\n")}},
+		"app+cwd":         {{"a.yaml", []byte("spaces:\n  x: {app: Slack, cwd: ~/src}\n")}},
+		"app+select":      {{"a.yaml", []byte("spaces:\n  x: {app: Slack, select: w}\n")}},
+		"app with pipe":   {{"a.yaml", []byte("spaces:\n  x: {app: 'a|b'}\n")}},
+		"app with quote":  {{"a.yaml", []byte("spaces:\n  x: {app: 'a\"b'}\n")}},
+		"app with dollar": {{"a.yaml", []byte("spaces:\n  x: {app: 'a$b'}\n")}},
 		"window twice":    {{"a.yaml", []byte("spaces:\n  x: {windows: [shell, shell]}\n")}},
 		"nameless window": {{"a.yaml", []byte("spaces:\n  x: {windows: [{command: nvim}]}\n")}},
 		"bad split":       {{"a.yaml", []byte("spaces:\n  x: {windows: [{name: w, split: diagonal}]}\n")}},
@@ -199,12 +214,19 @@ func TestYabaiRules(t *testing.T) {
 		{Name: "bf-2", Space: 4},
 		{Name: "bf-1", Space: 3},
 		{Name: "pr-reviews", Space: 9},
+		{Name: "backstage", Space: 10, App: "Bardo Backstage (Beta)"},
+		{Name: "cmux", Space: 8, App: "cmux"},
+		{Name: "unpinned-app", App: "Slack"},
 	}
 	var out strings.Builder
 	yabaiRules(spaces, &out)
+	// An app rule keys on the name, escaped for the regex; the
+	// backslashes are what yabairc's double-quoted eval hands yabai.
 	want := `yabai -m rule --add app="^Ghostty$" title="^bf-1$" space=^3
 yabai -m rule --add app="^Ghostty$" title="^bf-2$" space=^4
+yabai -m rule --add app="^cmux$" space=^8
 yabai -m rule --add app="^Ghostty$" title="^pr-reviews$" space=^9
+yabai -m rule --add app="^Bardo Backstage \(Beta\)$" space=^10
 yabai -m rule --add app="^Ghostty$" title="^eden$" space=^11
 `
 	if out.String() != want {

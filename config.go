@@ -19,10 +19,11 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// Space is one workspace: a terminal window pinned to a desktop space,
-// reachable by a key. It shows a tmux session with a fixed layout
-// (windows), or runs one program directly (command) — for programs
-// that are multiplexers themselves, like herdr.
+// Space is one workspace: a window pinned to a desktop space,
+// reachable by a key. A terminal window showing a tmux session with a
+// fixed layout (windows), or running one program directly (command) —
+// for programs that are multiplexers themselves, like herdr — or an
+// application's window (app).
 type Space struct {
 	Name    string   `yaml:"-"`
 	Key     string   `yaml:"key"`
@@ -30,6 +31,7 @@ type Space struct {
 	Cwd     pathList `yaml:"cwd"`
 	Windows []Window `yaml:"windows"`
 	Command argv     `yaml:"command"` // runs in the terminal instead of a tmux session
+	App     string   `yaml:"app"`     // an application, by name, instead of a terminal
 	Select  string   `yaml:"select"`  // window selected when the session is created; default: the first
 	Then    string   `yaml:"then"`    // run after `open` has focused the space
 
@@ -39,6 +41,10 @@ type Space struct {
 // isCommand reports whether the space runs its command in the terminal
 // itself, with no tmux session.
 func (sp Space) isCommand() bool { return len(sp.Command) > 0 }
+
+// isApp reports whether the space is an application's window rather
+// than a terminal.
+func (sp Space) isApp() bool { return sp.App != "" }
 
 // Window is a tmux window of a space. In YAML a bare string is a
 // window of that name running the shell.
@@ -247,6 +253,12 @@ func mergeSpaces(sources []source) ([]Space, error) {
 // evals — so only characters that mean nothing to any of them.
 var validName = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
+// validApp is what an application may be called: its name as the
+// window manager reports it and `open -a` accepts it. It becomes a
+// yabai regex too — see yabaiRegex — so nothing a regex or the shell
+// reads specially beyond what yabaiRegex escapes.
+var validApp = regexp.MustCompile(`^[A-Za-z0-9 ()._-]+$`)
+
 // validate checks one space's shape; paths are checked by `check`
 // and at open time, because they differ per machine.
 func (sp Space) validate() error {
@@ -259,15 +271,27 @@ func (sp Space) validate() error {
 	if sp.Space < 0 {
 		return fmt.Errorf("space must be a positive number, got %d", sp.Space)
 	}
+	kinds := 0
+	for _, is := range []bool{len(sp.Windows) > 0, sp.isCommand(), sp.isApp()} {
+		if is {
+			kinds++
+		}
+	}
 	switch {
-	case len(sp.Windows) == 0 && !sp.isCommand():
-		return errors.New("windows or command is required")
-	case len(sp.Windows) > 0 && sp.isCommand():
-		return errors.New("windows and command are exclusive: a space shows a tmux session or runs a program")
+	case kinds == 0:
+		return errors.New("windows, command or app is required")
+	case kinds > 1:
+		return errors.New("windows, command and app are exclusive: a space shows a tmux session, runs a program, or is an application")
 	case sp.isCommand() && sp.Command[0] == "":
 		return errors.New("command names no program")
 	case sp.isCommand() && sp.Select != "":
 		return errors.New("select picks a window; a command space has none")
+	case sp.isApp() && !validApp.MatchString(sp.App):
+		return fmt.Errorf("app %q: only letters, digits, space, ( ) . - and _ are allowed (it becomes a yabai rule's regex)", sp.App)
+	case sp.isApp() && len(sp.Cwd) > 0:
+		return errors.New("cwd applies to windows and command; an app space has none")
+	case sp.isApp() && sp.Select != "":
+		return errors.New("select picks a window; an app space has none")
 	}
 	seen := map[string]bool{}
 	for i, w := range sp.Windows {

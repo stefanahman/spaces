@@ -1,6 +1,7 @@
 // The desktop side of a space: the terminal window that shows the
-// session or runs the program, and the window manager that pins it to
-// a space and focuses it. One implementation today (yabai + Ghostty on macOS); the
+// session or runs the program, or the application's window, and the
+// window manager that pins it to a space and focuses it. One
+// implementation today (yabai + Ghostty on macOS); the
 // interface is the seam for others (Hyprland + a terminal on Linux).
 package main
 
@@ -20,9 +21,14 @@ type desktop interface {
 	// findWindow returns the id of the terminal window titled title,
 	// or "" when there is none.
 	findWindow(title string) (string, error)
+	// findAppWindow returns the id of the application's first window,
+	// or "" when it has none.
+	findAppWindow(app string) (string, error)
 	// spawn opens a new terminal window with that title, in cwd,
 	// running argv.
 	spawn(title, cwd string, argv []string) error
+	// launch starts the application, or activates it when it runs.
+	launch(app string) error
 	// moveToSpace pins the window to a desktop space.
 	moveToSpace(id string, space int) error
 	// focus brings the window to the front.
@@ -60,6 +66,16 @@ type yabaiWindow struct {
 }
 
 func (yabaiGhostty) findWindow(title string) (string, error) {
+	return findYabaiWindow(func(w yabaiWindow) bool { return w.App == "Ghostty" && w.Title == title })
+}
+
+func (yabaiGhostty) findAppWindow(app string) (string, error) {
+	return findYabaiWindow(func(w yabaiWindow) bool { return w.App == app })
+}
+
+// findYabaiWindow returns the id of the first window yabai reports
+// that matches, or "".
+func findYabaiWindow(match func(yabaiWindow) bool) (string, error) {
 	out, err := runOut(exec.Command("yabai", "-m", "query", "--windows"))
 	if err != nil {
 		return "", err
@@ -69,11 +85,19 @@ func (yabaiGhostty) findWindow(title string) (string, error) {
 		return "", fmt.Errorf("yabai -m query --windows: %w", err)
 	}
 	for _, w := range windows {
-		if w.App == "Ghostty" && w.Title == title {
+		if match(w) {
 			return strconv.Itoa(w.ID), nil
 		}
 	}
 	return "", nil
+}
+
+// launch opens the application through LaunchServices. On an app
+// that already runs (macOS keeps one alive with no windows) this
+// activates it, which reopens a window for most apps.
+func (yabaiGhostty) launch(app string) error {
+	_, err := runOut(exec.Command("open", "-a", app))
+	return err
 }
 
 // spawn opens Ghostty through LaunchServices (the only way to start a
@@ -129,16 +153,20 @@ func (yabaiGhostty) requirements() []requirement {
 	return []requirement{
 		{"tmux", onPath("tmux")},
 		{"yabai", onPath("yabai")},
-		{"Ghostty.app", func() bool {
-			home, _ := os.UserHomeDir()
-			for _, dir := range []string{"/Applications", filepath.Join(home, "Applications")} {
-				if _, err := os.Stat(filepath.Join(dir, "Ghostty.app")); err == nil {
-					return true
-				}
-			}
-			return false
-		}},
+		{"Ghostty.app", func() bool { return appBundleExists("Ghostty") }},
 	}
+}
+
+// appBundleExists reports whether <name>.app is installed in
+// /Applications or ~/Applications, where `open -a` and `check` look.
+func appBundleExists(name string) bool {
+	home, _ := os.UserHomeDir()
+	for _, dir := range []string{"/Applications", filepath.Join(home, "Applications")} {
+		if _, err := os.Stat(filepath.Join(dir, name+".app")); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // attachCommand is what a spawned terminal runs: tmux by absolute
@@ -174,7 +202,8 @@ func ensureWindow(d desktop, sp Space, argv []string, attached func() bool) (spa
 		if err := d.spawn(sp.Name, cwd, argv); err != nil {
 			return false, err
 		}
-		if id, err = waitForWindow(d, sp.Name, 5*time.Second); err != nil {
+		find := func() (string, error) { return d.findWindow(sp.Name) }
+		if id, err = waitForWindow(find, "terminal window "+sp.Name, 5*time.Second); err != nil {
 			return true, err
 		}
 		if sp.Space > 0 {
@@ -187,11 +216,12 @@ func ensureWindow(d desktop, sp Space, argv []string, attached func() bool) (spa
 	return spawned, d.focus(id)
 }
 
-// waitForWindow polls until the window manager reports the window.
-func waitForWindow(d desktop, title string, timeout time.Duration) (string, error) {
+// waitForWindow polls find until the window manager reports the
+// window; what names it in the error.
+func waitForWindow(find func() (string, error), what string, timeout time.Duration) (string, error) {
 	deadline := time.Now().Add(timeout)
 	for {
-		id, err := d.findWindow(title)
+		id, err := find()
 		if err != nil {
 			return "", err
 		}
@@ -199,7 +229,7 @@ func waitForWindow(d desktop, title string, timeout time.Duration) (string, erro
 			return id, nil
 		}
 		if time.Now().After(deadline) {
-			return "", fmt.Errorf("terminal window %q did not appear within %s", title, timeout)
+			return "", fmt.Errorf("%s did not appear within %s", what, timeout)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}

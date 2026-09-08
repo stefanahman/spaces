@@ -57,25 +57,44 @@ func startTmux(t *testing.T) {
 }
 
 // fakeDesktop records what open asks of the window manager. A spawned
-// window "appears" a couple of polls later, like a real one.
+// window, or a launched app's, "appears" a couple of polls later,
+// like a real one.
 type fakeDesktop struct {
 	calls   []string
-	present map[string]bool
-	pending int   // polls left before a spawned window is reported
-	indexes []int // the desktop spaces `check` can pin to
+	present map[string]bool // terminal windows, by title
+	apps    map[string]bool // applications with a window, by name
+	pending int             // polls left before a spawned window is reported
+	indexes []int           // the desktop spaces `check` can pin to
 }
 
-func newFakeDesktop() *fakeDesktop { return &fakeDesktop{present: map[string]bool{}} }
+func newFakeDesktop() *fakeDesktop {
+	return &fakeDesktop{present: map[string]bool{}, apps: map[string]bool{}}
+}
 
 func (d *fakeDesktop) findWindow(title string) (string, error) {
-	if !d.present[title] {
+	return d.appears(d.present[title], "w-"+title)
+}
+
+func (d *fakeDesktop) findAppWindow(app string) (string, error) {
+	return d.appears(d.apps[app], "a-"+app)
+}
+
+func (d *fakeDesktop) appears(present bool, id string) (string, error) {
+	if !present {
 		return "", nil
 	}
 	if d.pending > 0 {
 		d.pending--
 		return "", nil
 	}
-	return "w-" + title, nil
+	return id, nil
+}
+
+func (d *fakeDesktop) launch(app string) error {
+	d.calls = append(d.calls, "launch "+app)
+	d.apps[app] = true
+	d.pending = 2
+	return nil
 }
 
 func (d *fakeDesktop) spawn(title, cwd string, argv []string) error {
@@ -298,6 +317,35 @@ func TestOpenRunsAProgramInsteadOfASession(t *testing.T) {
 	}
 }
 
+func TestOpenLaunchesAnApplication(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	root := t.TempDir()
+	marker := filepath.Join(root, "then.ran")
+	sp := Space{Name: "cmux", Key: "c", Space: 8, App: "cmux", Then: "touch " + marker}
+	d := newFakeDesktop()
+	var out strings.Builder
+	if err := open(d, sp, true, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "cmux: app launched") {
+		t.Errorf("output: %q", out.String())
+	}
+	want := []string{"launch cmux", "move a-cmux -> 8", "focus a-cmux"}
+	if !reflect.DeepEqual(d.calls, want) {
+		t.Errorf("desktop calls = %v, want %v", d.calls, want)
+	}
+	waitForFile(t, marker)
+
+	d.calls = nil
+	out.Reset()
+	if err := open(d, sp, false, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "cmux: focused") || !reflect.DeepEqual(d.calls, []string{"focus a-cmux"}) {
+		t.Errorf("second open: %q, desktop calls %v", out.String(), d.calls)
+	}
+}
+
 func TestOpenReportsAMissingProgram(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	sp := Space{Name: "ghost", Command: argv{"no-such-program-tmux-spaces"}}
@@ -403,6 +451,19 @@ func TestList(t *testing.T) {
 	if !strings.Contains(out.String(), "herdr  h    7      ?") {
 		t.Errorf("list without a desktop:\n%s", out.String())
 	}
+
+	// An app space is asked of the desktop by the application's name.
+	d.apps["Slack"] = true
+	apps := []Space{{Name: "slack", Key: "s", Space: 13, App: "Slack"}, {Name: "zed", App: "Zed"}}
+	out.Reset()
+	if err := list(d, apps, &out); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"slack  s    13     window open  -", "zed    -    -      -            -"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("list lacks %q:\n%s", want, out.String())
+		}
+	}
 }
 
 func TestLockSpaceSerialises(t *testing.T) {
@@ -439,6 +500,7 @@ func TestCheck(t *testing.T) {
 		{Name: "d", Space: 2, Cwd: pathList{dir}, Windows: shell},
 		{Name: "e", Command: argv{"no-such-program-tmux-spaces", "--flag"}},
 		{Name: "f", Cwd: pathList{dir}, Command: argv{"sh"}},
+		{Name: "g", Space: 3, App: "No Such App (tmux-spaces)"},
 	}
 	var out strings.Builder
 	err := check(d, spaces, &out)
@@ -446,6 +508,7 @@ func TestCheck(t *testing.T) {
 		"error: b: desktop space 9 does not exist (this desktop has 1..3)",
 		"error: c: none of cwd [" + missing + "] exists",
 		"error: e: command \"no-such-program-tmux-spaces\" not found on PATH",
+		"error: g: no No Such App (tmux-spaces).app in /Applications or ~/Applications",
 		"warning: desktop space 2 is claimed by a, d",
 	} {
 		if !strings.Contains(out.String(), want) {
@@ -457,7 +520,7 @@ func TestCheck(t *testing.T) {
 			t.Errorf("check output has %q, which is not a problem:\n%s", fine, out.String())
 		}
 	}
-	if err == nil || err.Error() != "3 problem(s)" {
-		t.Errorf("check returned %v, want 3 problem(s)", err)
+	if err == nil || err.Error() != "4 problem(s)" {
+		t.Errorf("check returned %v, want 4 problem(s)", err)
 	}
 }

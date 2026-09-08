@@ -1,10 +1,10 @@
 // tmux-spaces — one config for tmux sessions on desktop spaces.
 //
-// A space is one terminal window that the window manager pins to a
-// desktop space, reachable by a key. It shows a tmux session with a
-// fixed window/pane layout, or runs one program directly. The config
-// declares all of it; the tool creates what is missing and focuses
-// what exists.
+// A space is one window that the window manager pins to a desktop
+// space, reachable by a key: a terminal showing a tmux session with a
+// fixed window/pane layout, a terminal running one program directly,
+// or an application's window. The config declares all of it; the tool
+// creates what is missing and focuses what exists.
 package main
 
 import (
@@ -31,7 +31,7 @@ func versionString() string {
 	return "dev"
 }
 
-const usage = `usage: tmux-spaces open <name>    bring the space up (its session or program, in its terminal window), focus it, run its then command
+const usage = `usage: tmux-spaces open <name>    bring the space up (its session or program in a terminal window, or its application), focus it, run its then command
        tmux-spaces focus <name>   same, without the then command
        tmux-spaces key <k>        open the space bound to key k
        tmux-spaces list           every space with its session (or window) and Claude state

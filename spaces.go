@@ -16,18 +16,27 @@ import (
 	"time"
 )
 
+// yabaiRegex escapes what an app name may contain that a regex reads
+// specially — ( ) . — so the rule matches the name literally. Inside
+// yabairc's double-quoted `eval`, a backslash before these survives
+// to yabai.
+var yabaiRegex = strings.NewReplacer(`.`, `\.`, `(`, `\(`, `)`, `\)`)
+
 // open brings a space up: session and windows, terminal window on its
 // desktop space, focus — and, with then, the space's `then` command
-// once a client is attached. A command space has no session: see
-// openCommand.
+// once a client is attached. A command space has no session, and an
+// app space no terminal: see openCommand and openApp.
 func open(d desktop, sp Space, then bool, out io.Writer) error {
 	unlock, err := lockSpace(sp.Name)
 	if err != nil {
 		return err
 	}
 	defer unlock()
-	if sp.isCommand() {
+	switch {
+	case sp.isCommand():
 		return openCommand(d, sp, then, out)
+	case sp.isApp():
+		return openApp(d, sp, then, out)
 	}
 	created, err := ensureSession(sp)
 	if err != nil {
@@ -90,9 +99,50 @@ func openCommand(d desktop, sp Space, then bool, out io.Writer) error {
 	return runThenCommand(sp)
 }
 
-// runThenCommand runs a command space's `then` through the shell, in
-// the background like runThen. Its output goes where tmux-spaces's
-// does: there is no session for tmux to show it in.
+// openApp brings an app space up: the application's window on its
+// desktop space, focused, the application launched first when it has
+// none. Applications start slowly, so the wait is longer than a
+// terminal's; like a command space there is no client to wait for or
+// to ask about a window the window manager can't see. macOS keeps an
+// application alive with no windows: `open -a` then activates it,
+// which reopens one for most apps, and the wait covers that too.
+func openApp(d desktop, sp Space, then bool, out io.Writer) error {
+	id, err := d.findAppWindow(sp.App)
+	if err != nil {
+		return err
+	}
+	launched := id == ""
+	if launched {
+		if err := d.launch(sp.App); err != nil {
+			return err
+		}
+		find := func() (string, error) { return d.findAppWindow(sp.App) }
+		if id, err = waitForWindow(find, sp.App+"'s window", 15*time.Second); err != nil {
+			return err
+		}
+		if sp.Space > 0 {
+			if err := d.moveToSpace(id, sp.Space); err != nil {
+				return err
+			}
+		}
+	}
+	if err := d.focus(id); err != nil {
+		return err
+	}
+	if launched {
+		fmt.Fprintf(out, "%s: app launched\n", sp.Name)
+	} else {
+		fmt.Fprintf(out, "%s: focused\n", sp.Name)
+	}
+	if !then || sp.Then == "" {
+		return nil
+	}
+	return runThenCommand(sp)
+}
+
+// runThenCommand runs a command or app space's `then` through the
+// shell, in the background like runThen. Its output goes where
+// tmux-spaces's does: there is no session for tmux to show it in.
 func runThenCommand(sp Space) error {
 	cmd := exec.Command("/bin/sh", "-c", sp.Then)
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
@@ -141,8 +191,8 @@ func lockDir() (string, error) {
 	return filepath.Join(base, "tmux-spaces"), nil
 }
 
-// list prints every space with its session state (for a command space:
-// whether its window is open) and, when the windows carry
+// list prints every space with its session state (for a command or
+// app space: whether its window is open) and, when the windows carry
 // tmux-claude-status's @claude-state option, what Claude is doing there.
 //
 // The formats are `:`-separated, with the name last: a tmux client
@@ -194,12 +244,17 @@ func list(d desktop, spaces []Space, out io.Writer) error {
 			key = sp.Key
 		}
 		session := "-"
-		if sp.isCommand() {
-			session = windowState(d, sp.Name)
-		} else if s, ok := sessions[sp.Name]; ok {
-			session = fmt.Sprintf("%d windows", s.windows)
-			if s.attached {
-				session += ", attached"
+		switch {
+		case sp.isCommand():
+			session = windowState(d, func(d desktop) (string, error) { return d.findWindow(sp.Name) })
+		case sp.isApp():
+			session = windowState(d, func(d desktop) (string, error) { return d.findAppWindow(sp.App) })
+		default:
+			if s, ok := sessions[sp.Name]; ok {
+				session = fmt.Sprintf("%d windows", s.windows)
+				if s.attached {
+					session += ", attached"
+				}
 			}
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", sp.Name, key, space, session, claudeChip(claude[sp.Name]))
@@ -212,14 +267,14 @@ type sessionInfo struct {
 	windows  int
 }
 
-// windowState is a command space's counterpart of the session column:
-// whether its terminal window is up. "?" when the window manager can't
-// be asked (no desktop backend on this OS).
-func windowState(d desktop, name string) string {
+// windowState is a command or app space's counterpart of the session
+// column: whether its window, as find looks it up, is up. "?" when the
+// window manager can't be asked (no desktop backend on this OS).
+func windowState(d desktop, find func(desktop) (string, error)) string {
 	if d == nil {
 		return "?"
 	}
-	id, err := d.findWindow(name)
+	id, err := find(d)
 	switch {
 	case err != nil:
 		return "?"
@@ -259,14 +314,19 @@ func yabaiRules(spaces []Space, out io.Writer) {
 		if sp.Space == 0 {
 			continue
 		}
+		if sp.isApp() {
+			fmt.Fprintf(out, "yabai -m rule --add app=\"^%s$\" space=^%d\n", yabaiRegex.Replace(sp.App), sp.Space)
+			continue
+		}
 		fmt.Fprintf(out, "yabai -m rule --add app=\"^Ghostty$\" title=\"^%s$\" space=^%d\n", sp.Name, sp.Space)
 	}
 }
 
 // check reports what would stop a space from opening on this machine:
-// missing directories, a command not on PATH, desktop spaces that don't
-// exist, duplicate desktop spaces, missing tools. Exit status 1 when
-// anything is wrong; warnings alone pass.
+// missing directories, a command not on PATH, an application not
+// installed, desktop spaces that don't exist, duplicate desktop
+// spaces, missing tools. Exit status 1 when anything is wrong;
+// warnings alone pass.
 func check(d desktop, spaces []Space, out io.Writer) error {
 	problems := 0
 	files, _ := configFiles()
@@ -283,6 +343,10 @@ func check(d desktop, spaces []Space, out io.Writer) error {
 				fmt.Fprintf(out, "error: %s: command %q not found on PATH\n", sp.Name, sp.Command[0])
 				problems++
 			}
+		}
+		if sp.isApp() && !appBundleExists(sp.App) {
+			fmt.Fprintf(out, "error: %s: no %s.app in /Applications or ~/Applications\n", sp.Name, sp.App)
+			problems++
 		}
 		for _, w := range sp.Windows {
 			if len(w.Cwd) > 0 {
