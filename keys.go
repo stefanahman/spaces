@@ -88,13 +88,19 @@ func resolveKey(spaces []Space, key, active string) (keyHolder, error) {
 }
 
 // keyCmd is `spaces key <k>`: open what the key resolves to — a space,
-// or a space on one of its workspaces — then the space's then.
-func keyCmd(d desktop, spaces []Space, key string, out io.Writer) error {
+// or a space on one of its workspaces — then the space's then. The
+// desktop is asked for only once the key has resolved: a miss is
+// about the key, whatever the OS.
+func keyCmd(newDesktop func() (desktop, error), spaces []Space, key string, out io.Writer) error {
 	active, err := activeMultiplexer()
 	if err != nil {
 		return err
 	}
 	h, err := resolveKey(spaces, key, active)
+	if err != nil {
+		return err
+	}
+	d, err := newDesktop()
 	if err != nil {
 		return err
 	}

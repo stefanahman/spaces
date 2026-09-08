@@ -128,7 +128,7 @@ func TestKeyOpensTheWorkspaceOfTheActiveMultiplexer(t *testing.T) {
 	if err := setActiveMultiplexer("herdr"); err != nil {
 		t.Fatal(err)
 	}
-	if err := keyCmd(d, spaces, "1", &out); err != nil {
+	if err := keyCmd(func() (desktop, error) { return d, nil }, spaces, "1", &out); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "herdr: window spawned; bf-1 selected\nherdr: 2 workspaces created") {
@@ -142,7 +142,7 @@ func TestKeyOpensTheWorkspaceOfTheActiveMultiplexer(t *testing.T) {
 		t.Fatal(err)
 	}
 	out.Reset()
-	if err := keyCmd(d, spaces, "r", &out); err != nil {
+	if err := keyCmd(func() (desktop, error) { return d, nil }, spaces, "r", &out); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "herdr: focused; pr-owl selected") || fake.Focused() != fake.Workspace("pr-owl").ID {
@@ -152,7 +152,7 @@ func TestKeyOpensTheWorkspaceOfTheActiveMultiplexer(t *testing.T) {
 	if err := setActiveMultiplexer("cmux"); err != nil {
 		t.Fatal(err)
 	}
-	if err := keyCmd(d, spaces, "1", &out); err == nil || !strings.Contains(err.Error(), "bound in tmux and herdr") {
+	if err := keyCmd(func() (desktop, error) { return d, nil }, spaces, "1", &out); err == nil || !strings.Contains(err.Error(), "bound in tmux and herdr") {
 		t.Errorf("ambiguous key: %v", err)
 	}
 	for _, c := range d.calls {

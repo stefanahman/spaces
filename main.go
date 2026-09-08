@@ -107,9 +107,7 @@ func main() {
 		if len(args) != 2 {
 			exitOn(usageError("key: expected a key"))
 		}
-		d, err := newDesktop()
-		exitOn(err)
-		exitOn(keyCmd(d, spaces, args[1], os.Stdout))
+		exitOn(keyCmd(newDesktop, spaces, args[1], os.Stdout))
 	case "list":
 		d, _ := newDesktop() // nil off macOS: list still works, command spaces show "?"
 		exitOn(list(d, spaces, os.Stdout))
