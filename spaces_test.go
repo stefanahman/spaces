@@ -505,6 +505,10 @@ func TestCheck(t *testing.T) {
 		{Name: "e", Command: argv{"no-such-program-spaces", "--flag"}},
 		{Name: "f", Cwd: pathList{dir}, Command: argv{"sh"}},
 		{Name: "g", Space: 3, App: "No Such App (spaces)"},
+		{Name: "h", Command: argv{"sh"}, Multiplexer: "herdr", Workspaces: map[string]Workspace{
+			"ok":   {Cwd: pathList{dir}, Windows: []Window{{Name: "w", Cwd: pathList{dir}}}},
+			"lost": {Cwd: pathList{missing}, Windows: []Window{{Name: "w", Panes: []Pane{{}, {Cwd: pathList{missing}}}}}},
+		}},
 	}
 	var out strings.Builder
 	err := check(d, spaces, &out)
@@ -513,6 +517,8 @@ func TestCheck(t *testing.T) {
 		"error: c: none of cwd [" + missing + "] exists",
 		"error: e: command \"no-such-program-spaces\" not found on PATH",
 		"error: g: no No Such App (spaces).app in /Applications, ~/Applications or /System/Applications",
+		"error: h: workspace lost: none of cwd [" + missing + "] exists",
+		"error: h: workspace lost: window w pane 1: none of cwd [" + missing + "] exists",
 		"warning: desktop space 2 is claimed by a, d",
 	} {
 		if !strings.Contains(out.String(), want) {
@@ -524,7 +530,10 @@ func TestCheck(t *testing.T) {
 			t.Errorf("check output has %q, which is not a problem:\n%s", fine, out.String())
 		}
 	}
-	if err == nil || err.Error() != "4 problem(s)" {
-		t.Errorf("check returned %v, want 4 problem(s)", err)
+	if strings.Contains(out.String(), "workspace ok") {
+		t.Errorf("check complains about the workspace that is fine:\n%s", out.String())
+	}
+	if err == nil || err.Error() != "6 problem(s)" {
+		t.Errorf("check returned %v, want 6 problem(s)", err)
 	}
 }

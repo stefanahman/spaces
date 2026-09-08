@@ -32,7 +32,7 @@ func versionString() string {
 	return "dev"
 }
 
-const usage = `usage: spaces open <name>    bring the space up (its session or program in a terminal window, or its application), focus it, run its then command
+const usage = `usage: spaces open <name>    bring the space up (its session or program in a terminal window, or its application), focus it, build its workspaces, run its then command
        spaces focus <name>   same, without the then command
        spaces key <k>        open the space bound to key k
        spaces list           every space with its session (or window) and Claude state

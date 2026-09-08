@@ -93,10 +93,22 @@ func openCommand(d desktop, sp Space, then bool, out io.Writer) error {
 	} else {
 		fmt.Fprintf(out, "%s: focused\n", sp.Name)
 	}
+	if err := renderWorkspaces(sp, out); err != nil {
+		return err
+	}
 	if !then || sp.Then == "" {
 		return nil
 	}
 	return runThenCommand(sp)
+}
+
+// renderWorkspaces builds the space's workspaces, when it declares
+// any, in the multiplexer the window runs.
+func renderWorkspaces(sp Space, out io.Writer) error {
+	if !sp.hasWorkspaces() {
+		return nil
+	}
+	return render(newDriver(sp), sp, out, os.Stderr)
 }
 
 // openApp brings an app space up: the application's window on its
@@ -133,6 +145,9 @@ func openApp(d desktop, sp Space, then bool, out io.Writer) error {
 		fmt.Fprintf(out, "%s: app launched\n", sp.Name)
 	} else {
 		fmt.Fprintf(out, "%s: focused\n", sp.Name)
+	}
+	if err := renderWorkspaces(sp, out); err != nil {
+		return err
 	}
 	if !then || sp.Then == "" {
 		return nil
@@ -192,7 +207,8 @@ func lockDir() (string, error) {
 }
 
 // list prints every space with its session state (for a command or
-// app space: whether its window is open) and, when the windows carry
+// app space: whether its window is open, and for one with workspaces
+// how many of them exist) and, when the windows carry
 // tmux-claude-status's @claude-state option, what Claude is doing there.
 //
 // The formats are `:`-separated, with the name last: a tmux client
@@ -256,6 +272,13 @@ func list(d desktop, spaces []Space, out io.Writer) error {
 					session += ", attached"
 				}
 			}
+		}
+		if sp.hasWorkspaces() {
+			have := "?"
+			if n, ok := workspaceCount(newDriver(sp), sp); ok {
+				have = strconv.Itoa(n)
+			}
+			session += fmt.Sprintf(", %s/%d workspaces", have, len(sp.Workspaces))
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", sp.Name, key, space, session, claudeChip(claude[sp.Name]))
 	}
@@ -348,21 +371,16 @@ func check(d desktop, spaces []Space, out io.Writer) error {
 			fmt.Fprintf(out, "error: %s: no %s.app in /Applications, ~/Applications or /System/Applications\n", sp.Name, sp.App)
 			problems++
 		}
-		for _, w := range sp.Windows {
-			if len(w.Cwd) > 0 {
-				if _, ok := w.Cwd.resolve(); !ok {
-					fmt.Fprintf(out, "error: %s: window %s: none of cwd %v exists\n", sp.Name, w.Name, w.Cwd)
+		problems += checkWindows(out, sp.Name, sp.Windows)
+		for _, name := range sp.workspaceNames() {
+			ws := sp.Workspaces[name]
+			if len(ws.Cwd) > 0 {
+				if _, ok := ws.Cwd.resolve(); !ok {
+					fmt.Fprintf(out, "error: %s: workspace %s: none of cwd %v exists\n", sp.Name, name, ws.Cwd)
 					problems++
 				}
 			}
-			for i, p := range w.Panes {
-				if len(p.Cwd) > 0 {
-					if _, ok := p.Cwd.resolve(); !ok {
-						fmt.Fprintf(out, "error: %s: window %s pane %d: none of cwd %v exists\n", sp.Name, w.Name, i, p.Cwd)
-						problems++
-					}
-				}
-			}
+			problems += checkWindows(out, sp.Name+": workspace "+name, ws.Windows)
 		}
 	}
 	bySpace := map[int][]string{}
@@ -408,6 +426,29 @@ func check(d desktop, spaces []Space, out io.Writer) error {
 	}
 	fmt.Fprintln(out, "ok")
 	return nil
+}
+
+// checkWindows reports the windows and panes whose directories are
+// missing; returns how many.
+func checkWindows(out io.Writer, what string, windows []Window) int {
+	problems := 0
+	for _, w := range windows {
+		if len(w.Cwd) > 0 {
+			if _, ok := w.Cwd.resolve(); !ok {
+				fmt.Fprintf(out, "error: %s: window %s: none of cwd %v exists\n", what, w.Name, w.Cwd)
+				problems++
+			}
+		}
+		for i, p := range w.Panes {
+			if len(p.Cwd) > 0 {
+				if _, ok := p.Cwd.resolve(); !ok {
+					fmt.Fprintf(out, "error: %s: window %s pane %d: none of cwd %v exists\n", what, w.Name, i, p.Cwd)
+					problems++
+				}
+			}
+		}
+	}
+	return problems
 }
 
 // configPathCmd prints the directory the config is read from.

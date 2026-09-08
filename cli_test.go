@@ -23,7 +23,7 @@ func TestCLI(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "spaces", "spaces.d"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "spaces", "spaces.d", "a.yaml"), []byte("spaces:\n  app: {key: a, space: 3, windows: [shell]}\n  herdr: {key: h, space: 7, command: herdr --session work}\n  cmux: {key: c, space: 8, app: cmux}\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "spaces", "spaces.d", "a.yaml"), []byte("spaces:\n  app: {key: a, space: 3, windows: [shell]}\n  herdr: {key: h, space: 7, command: herdr --session work, multiplexer: herdr, session: work, workspaces: {bf-1: {windows: [shell, {name: nvim, command: nvim}]}}, select: bf-1}\n  cmux: {key: c, space: 8, app: cmux}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	run := func(args ...string) (string, int) {

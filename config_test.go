@@ -100,6 +100,57 @@ spaces:
 	}
 }
 
+func TestWorkspaces(t *testing.T) {
+	t.Setenv("HOME", "/home/owl")
+	spaces, err := mergeSpaces([]source{{"bardo.yaml", []byte(`
+spaces:
+  herdr:
+    key: h
+    space: 7
+    command: herdr --session work
+    multiplexer: herdr
+    session: work
+    workspaces:
+      bf-1: {cwd: ~/Development/bardo/bardo-system, windows: [shell, {name: nvim, command: nvim}]}
+      eden:
+        cwd: ~/Development/eden
+        windows:
+          - {name: eden, panes: [{}, {cwd: ~/Development/eden-private-branches}]}
+          - {name: nvim, command: nvim, cwd: ~/Development/eden-private-branches}
+      pr-owl: {cwd: ~/Development/bardo/bardo-system, windows: [{name: pr-owl, command: pr-owl --mux herdr}]}
+    select: pr-owl
+  cmux:
+    key: c
+    space: 8
+    app: cmux
+    env: {CMUX_SOCKET_MODE: allowAll}
+    multiplexer: cmux
+    workspaces:
+      pr-owl: {cwd: ~/Development/bardo/bardo-system, windows: [{name: pr-owl, command: pr-owl --mux cmux}]}
+`)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	herdr, _ := find(spaces, "herdr")
+	if herdr.Multiplexer != "herdr" || herdr.Session != "work" || len(herdr.Workspaces) != 3 || herdr.Select != "pr-owl" || !herdr.hasWorkspaces() {
+		t.Errorf("herdr = %+v", herdr)
+	}
+	if got := herdr.workspaceNames(); !reflect.DeepEqual(got, []string{"bf-1", "eden", "pr-owl"}) {
+		t.Errorf("workspace names = %v", got)
+	}
+	eden := herdr.Workspaces["eden"]
+	if len(eden.Windows) != 2 || len(eden.Windows[0].Panes) != 2 || eden.Windows[1].Command != "nvim" || !reflect.DeepEqual(eden.Windows[1].Cwd, pathList{"~/Development/eden-private-branches"}) {
+		t.Errorf("eden = %+v", eden)
+	}
+	if bf := herdr.Workspaces["bf-1"]; !reflect.DeepEqual(bf.Windows, []Window{{Name: "shell"}, {Name: "nvim", Command: "nvim"}}) {
+		t.Errorf("bf-1 windows = %+v", bf.Windows)
+	}
+	cmux, _ := find(spaces, "cmux")
+	if cmux.Multiplexer != "cmux" || cmux.Workspaces["pr-owl"].Windows[0].Command != "pr-owl --mux cmux" || cmux.Select != "" {
+		t.Errorf("cmux = %+v", cmux)
+	}
+}
+
 func TestMergeSpacesRejects(t *testing.T) {
 	cases := map[string][]source{
 		"name twice": {
@@ -133,8 +184,18 @@ func TestMergeSpacesRejects(t *testing.T) {
 		"bad split":       {{"a.yaml", []byte("spaces:\n  x: {windows: [{name: w, split: diagonal}]}\n")}},
 		"command+panes":   {{"a.yaml", []byte("spaces:\n  x: {windows: [{name: w, command: nvim, panes: [{}, {}]}]}\n")}},
 		"select unknown":  {{"a.yaml", []byte("spaces:\n  x: {windows: [shell], select: nvim}\n")}},
-		"name with colon": {{"a.yaml", []byte("spaces:\n  a:b: {windows: [shell]}\n")}},
-		"negative space":  {{"a.yaml", []byte("spaces:\n  x: {space: -1, windows: [shell]}\n")}},
+		// Workspaces live inside a herdr or cmux space, named as such.
+		"workspaces on a tmux space":     {{"a.yaml", []byte("spaces:\n  x: {windows: [shell], multiplexer: herdr, workspaces: {a: {}}}\n")}},
+		"workspaces without multiplexer": {{"a.yaml", []byte("spaces:\n  x: {app: cmux, workspaces: {a: {}}}\n")}},
+		"multiplexer without workspaces": {{"a.yaml", []byte("spaces:\n  x: {app: cmux, multiplexer: cmux}\n")}},
+		"unknown multiplexer":            {{"a.yaml", []byte("spaces:\n  x: {app: cmux, multiplexer: screen, workspaces: {a: {}}}\n")}},
+		"session on cmux":                {{"a.yaml", []byte("spaces:\n  x: {app: cmux, multiplexer: cmux, session: work, workspaces: {a: {}}}\n")}},
+		"select of no workspace":         {{"a.yaml", []byte("spaces:\n  x: {app: cmux, multiplexer: cmux, workspaces: {a: {}}, select: b}\n")}},
+		"workspace name with space":      {{"a.yaml", []byte("spaces:\n  x: {app: cmux, multiplexer: cmux, workspaces: {'a b': {}}}\n")}},
+		"workspace window twice":         {{"a.yaml", []byte("spaces:\n  x: {app: cmux, multiplexer: cmux, workspaces: {a: {windows: [w, w]}}}\n")}},
+		"workspace pane and command":     {{"a.yaml", []byte("spaces:\n  x: {app: cmux, multiplexer: cmux, workspaces: {a: {windows: [{name: w, command: c, panes: [{}, {}]}]}}}\n")}},
+		"name with colon":                {{"a.yaml", []byte("spaces:\n  a:b: {windows: [shell]}\n")}},
+		"negative space":                 {{"a.yaml", []byte("spaces:\n  x: {space: -1, windows: [shell]}\n")}},
 		// Names end up in a yabai regex that yabairc evals, in tmux
 		// targets and in a window title: letters, digits, - and _ only.
 		"name with quote":    {{"a.yaml", []byte("spaces:\n  'a\"b': {windows: [shell]}\n")}},

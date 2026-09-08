@@ -23,20 +23,48 @@ import (
 // reachable by a key. A terminal window showing a tmux session with a
 // fixed layout (windows), or running one program directly (command) —
 // for programs that are multiplexers themselves, like herdr — or an
-// application's window (app).
+// application's window (app). A command or app space that is itself a
+// multiplexer (herdr, cmux) can declare the workspaces to build inside
+// it.
 type Space struct {
-	Name    string            `yaml:"-"`
-	Key     string            `yaml:"key"`
-	Space   int               `yaml:"space"` // desktop space; 0 = not pinned
-	Cwd     pathList          `yaml:"cwd"`
-	Windows []Window          `yaml:"windows"`
-	Command argv              `yaml:"command"` // runs in the terminal instead of a tmux session
-	App     string            `yaml:"app"`     // an application, by name, instead of a terminal
-	Env     map[string]string `yaml:"env"`     // environment the application is launched with (app spaces only)
-	Select  string            `yaml:"select"`  // window selected when the session is created; default: the first
-	Then    string            `yaml:"then"`    // run after `open` has focused the space
+	Name        string               `yaml:"-"`
+	Key         string               `yaml:"key"`
+	Space       int                  `yaml:"space"` // desktop space; 0 = not pinned
+	Cwd         pathList             `yaml:"cwd"`
+	Windows     []Window             `yaml:"windows"`
+	Command     argv                 `yaml:"command"`     // runs in the terminal instead of a tmux session
+	App         string               `yaml:"app"`         // an application, by name, instead of a terminal
+	Env         map[string]string    `yaml:"env"`         // environment the application is launched with (app spaces only)
+	Multiplexer string               `yaml:"multiplexer"` // herdr or cmux: what renders the workspaces
+	Session     string               `yaml:"session"`     // herdr: the session whose socket to use; default: herdr's default socket
+	Workspaces  map[string]Workspace `yaml:"workspaces"`  // the work context built inside the multiplexer, by name
+	Select      string               `yaml:"select"`      // window selected when the session is created (default: the first), or the workspace shown when the space opens
+	Then        string               `yaml:"then"`        // run after `open` has focused the space
 
 	file string // where it was declared, for error messages
+}
+
+// Workspace is one workspace inside a herdr or cmux space: its
+// directory and its windows — tabs there — with the panes of each.
+// The first window is the pane the workspace is created with.
+type Workspace struct {
+	Cwd     pathList `yaml:"cwd"`
+	Windows []Window `yaml:"windows"`
+}
+
+// hasWorkspaces reports whether the space builds workspaces inside a
+// multiplexer.
+func (sp Space) hasWorkspaces() bool { return len(sp.Workspaces) > 0 }
+
+// workspaceNames lists the workspaces in name order: the order they
+// are created in, the same every time.
+func (sp Space) workspaceNames() []string {
+	names := make([]string, 0, len(sp.Workspaces))
+	for name := range sp.Workspaces {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // envList renders env as KEY=VALUE entries, values expanded like paths
@@ -311,45 +339,79 @@ func (sp Space) validate() error {
 		return errors.New("windows, command and app are exclusive: a space shows a tmux session, runs a program, or is an application")
 	case sp.isCommand() && sp.Command[0] == "":
 		return errors.New("command names no program")
-	case sp.isCommand() && sp.Select != "":
+	case sp.isCommand() && sp.Select != "" && !sp.hasWorkspaces():
 		return errors.New("select picks a window; a command space has none")
 	case sp.isApp() && !validApp.MatchString(sp.App):
 		return fmt.Errorf("app %q: only letters, digits, space, ( ) . - and _ are allowed (it becomes a yabai rule's regex)", sp.App)
 	case sp.isApp() && len(sp.Cwd) > 0:
 		return errors.New("cwd applies to windows and command; an app space has none")
-	case sp.isApp() && sp.Select != "":
+	case sp.isApp() && sp.Select != "" && !sp.hasWorkspaces():
 		return errors.New("select picks a window; an app space has none")
 	case len(sp.Env) > 0 && !sp.isApp():
 		return errors.New("env applies to app spaces; a tmux window inherits the server's environment, a command runs in Ghostty's")
+	case sp.hasWorkspaces() && len(sp.Windows) > 0:
+		return errors.New("workspaces are built inside a herdr or cmux space (command or app); a tmux space has windows")
+	case sp.hasWorkspaces() && sp.Multiplexer == "":
+		return errors.New("multiplexer is required with workspaces: herdr or cmux")
+	case sp.Multiplexer != "" && sp.Multiplexer != "herdr" && sp.Multiplexer != "cmux":
+		return fmt.Errorf("multiplexer must be herdr or cmux, got %q", sp.Multiplexer)
+	case sp.Multiplexer != "" && !sp.hasWorkspaces():
+		return errors.New("multiplexer applies to workspaces; declare some")
+	case sp.Session != "" && sp.Multiplexer != "herdr":
+		return errors.New("session applies to a herdr multiplexer")
 	}
 	for name := range sp.Env {
 		if !validEnvName.MatchString(name) {
 			return fmt.Errorf("env: %q is not a variable name", name)
 		}
 	}
-	seen := map[string]bool{}
-	for i, w := range sp.Windows {
-		if w.Name == "" {
-			return fmt.Errorf("windows[%d] has no name", i)
+	seen, err := validateWindows(sp.Windows)
+	if err != nil {
+		return err
+	}
+	for _, name := range sp.workspaceNames() {
+		if !validName.MatchString(name) {
+			return fmt.Errorf("workspace %q: only letters, digits, - and _ are allowed", name)
 		}
-		if !validName.MatchString(w.Name) {
-			return fmt.Errorf("window %q: only letters, digits, - and _ are allowed", w.Name)
-		}
-		if seen[w.Name] {
-			return fmt.Errorf("window %q is declared twice", w.Name)
-		}
-		seen[w.Name] = true
-		if w.Split != "" && w.Split != "horizontal" && w.Split != "vertical" {
-			return fmt.Errorf("window %q: split must be horizontal or vertical, got %q", w.Name, w.Split)
-		}
-		if len(w.Panes) > 0 && w.Command != "" {
-			return fmt.Errorf("window %q: give the command to the panes, not the window", w.Name)
+		if _, err := validateWindows(sp.Workspaces[name].Windows); err != nil {
+			return fmt.Errorf("workspace %q: %w", name, err)
 		}
 	}
-	if sp.Select != "" && !seen[sp.Select] {
+	switch {
+	case sp.Select == "":
+	case sp.hasWorkspaces():
+		if _, ok := sp.Workspaces[sp.Select]; !ok {
+			return fmt.Errorf("select names workspace %q, which is not declared", sp.Select)
+		}
+	case !seen[sp.Select]:
 		return fmt.Errorf("select names window %q, which is not declared", sp.Select)
 	}
 	return nil
+}
+
+// validateWindows checks a list of windows: named, uniquely, with a
+// sensible split and the command where it belongs. Returns the names.
+func validateWindows(windows []Window) (map[string]bool, error) {
+	seen := map[string]bool{}
+	for i, w := range windows {
+		if w.Name == "" {
+			return nil, fmt.Errorf("windows[%d] has no name", i)
+		}
+		if !validName.MatchString(w.Name) {
+			return nil, fmt.Errorf("window %q: only letters, digits, - and _ are allowed", w.Name)
+		}
+		if seen[w.Name] {
+			return nil, fmt.Errorf("window %q is declared twice", w.Name)
+		}
+		seen[w.Name] = true
+		if w.Split != "" && w.Split != "horizontal" && w.Split != "vertical" {
+			return nil, fmt.Errorf("window %q: split must be horizontal or vertical, got %q", w.Name, w.Split)
+		}
+		if len(w.Panes) > 0 && w.Command != "" {
+			return nil, fmt.Errorf("window %q: give the command to the panes, not the window", w.Name)
+		}
+	}
+	return seen, nil
 }
 
 // find returns the space with the given name.
