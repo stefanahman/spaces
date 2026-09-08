@@ -257,7 +257,7 @@ of its own workspaces on the same key are errors that name both.
 | `use [tmux\|herdr\|cmux]` | pick, or set, the active multiplexer; without an argument, off a terminal, just list them with the active one marked |
 | `list` | the active multiplexer, then name, key (a space's own, and its workspaces' in brackets), space, session state (for a command or app space: whether its window is open, and how many of its workspaces exist), and the [tmux-claude-status](https://github.com/stefanahman/tmux-claude-status) chip of its windows (`1⚠ 2~ 1* 3`: blocked, working, done, idle) |
 | `yabai-rules` | one `yabai -m rule` per pinned space — `eval` it in your yabairc so the space number has one home |
-| `check` | missing directories (workspaces' too), commands, applications and tools, desktop spaces that don't exist or are claimed twice |
+| `check` | missing directories (workspaces' too), commands, applications and tools, desktop spaces that don't exist or are claimed twice, and a running multiplexer that was started with the wrong environment (see *Clean launches*) |
 | `config path` | the directory it reads |
 
 Exit status: 64 for a bad invocation, 1 for a failure.
@@ -310,6 +310,22 @@ appends `/opt/homebrew/bin` and `/usr/local/bin` to its own and finds
 tmux and yabai there without a login shell in between; your PATH still
 comes first. The tmux server it starts inherits that PATH, which is
 one more reason `then` wants absolute paths.
+
+**Clean launches.** Everything spaces starts — the tmux server, a
+Ghostty window and the program in it, an application (`open` hands the
+caller's whole environment to what it launches) and a `then` command —
+gets the environment spaces runs in, less what a multiplexer must not
+inherit: `TMUX` and `TMUX_PANE`, `CMUX_*`, `HERDR_*`, and Claude Code's
+session markers (`CLAUDECODE`, `CLAUDE_*`). A cmux launched with `TMUX`
+set hands its surface id to tmux before every command and never
+engages its Claude Code hooks; a tmux server, herdr server or cmux
+started from inside a Claude Code session runs every agent in it as a
+child session, which saves no transcript. So a space opens the same
+from a hotkey, a plain shell, a tmux pane or an agent's shell. `check`
+asks the multiplexers that run — tmux, and the herdr sessions and cmux
+the spaces declare — how they were started, and reports one that was
+started some other way with those variables in its environment; quit
+it and open its space again.
 
 **Claude state.** The `CLAUDE` column of `list` reads the
 `@claude-state` window option that
