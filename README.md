@@ -247,6 +247,10 @@ to answer on. Within one multiplexer a key is bound at most once: two tmux
 spaces, two workspaces of one cmux space or of two, or a space and one
 of its own workspaces on the same key are errors that name both.
 
+A hotkey has no terminal to fail in, so whatever stops `key` — a key
+bound in two multiplexers, a multiplexer that refuses, a window that
+never came — is shown as a desktop notification as well.
+
 ## Commands
 
 | | |

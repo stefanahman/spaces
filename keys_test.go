@@ -171,6 +171,53 @@ func TestKeyOpensTheWorkspaceOfTheActiveMultiplexer(t *testing.T) {
 	}
 }
 
+// A hotkey has no terminal: every failure behind it is shown on the
+// desktop as well as returned.
+func TestKeyNotifiesEveryFailure(t *testing.T) {
+	quick(t)
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	for _, v := range []string{"HERDR_ENV", "HERDR_WORKSPACE_ID", "HERDR_SESSION"} {
+		t.Setenv(v, "")
+	}
+	orig := newDriver
+	newDriver = func(string, string) mux.Driver { return mux.NewHerdr("/nonexistent/herdr.sock") }
+	t.Cleanup(func() { newDriver = orig })
+	spaces := []Space{{Name: "herdr", Key: "h", Space: 7, Command: argv{"sleep", "30"}, Multiplexer: "herdr", Select: "bf-1", Workspaces: map[string]Workspace{
+		"bf-1": {Key: "1", Windows: []Window{{Name: "shell"}}},
+	}}}
+	if err := setActiveMultiplexer("herdr"); err != nil {
+		t.Fatal(err)
+	}
+	d := newFakeDesktop()
+	var out strings.Builder
+
+	// Nothing bound: the error, and the notification with it.
+	err := keyCmd(func() (desktop, error) { return d, nil }, spaces, "z", &out)
+	if err == nil || !strings.Contains(err.Error(), `no space bound to key "z"`) {
+		t.Errorf("unbound key: %v", err)
+	}
+	if want := []string{`notify spaces no space bound to key "z"`}; !reflect.DeepEqual(d.calls, want) {
+		t.Errorf("desktop calls = %v, want %v", d.calls, want)
+	}
+
+	// The multiplexer refuses: the window came, the rendering did not;
+	// the last thing the desktop hears is the reason.
+	d.calls = nil
+	err = keyCmd(func() (desktop, error) { return d, nil }, spaces, "1", &out)
+	if err == nil || !strings.Contains(err.Error(), "herdr") {
+		t.Errorf("unreachable multiplexer: %v", err)
+	}
+	if last := d.calls[len(d.calls)-1]; !strings.HasPrefix(last, "notify spaces herdr") {
+		t.Errorf("desktop calls = %v, want the failure notified last", d.calls)
+	}
+
+	// No desktop at all: only the error.
+	if err := keyCmd(func() (desktop, error) { return nil, errors.New("no desktop") }, spaces, "z", &out); err == nil || !strings.Contains(err.Error(), `no space bound`) {
+		t.Errorf("without a desktop: %v", err)
+	}
+}
+
 func TestListShowsTheMultiplexerAndWorkspaceKeys(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	quick(t)

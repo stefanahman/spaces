@@ -107,20 +107,35 @@ func resolveKey(spaces []Space, key, active string) (keyHolder, error) {
 // notification: a hotkey has no terminal to print to, and the press
 // was not a mistake worth an error.
 func keyCmd(newDesktop func() (desktop, error), spaces []Space, key string, out io.Writer) error {
+	err := openKey(newDesktop, spaces, key, out)
+	if err == nil {
+		return nil
+	}
+	// A hotkey runs in no terminal: whatever went wrong — a key bound
+	// in two multiplexers, a multiplexer that refuses, a window that
+	// never came — reaches the user through the desktop, when there is
+	// one. A key bound elsewhere is a choice to make, not a failure.
+	d, derr := newDesktop()
+	if derr == nil {
+		_ = d.notify("spaces", err.Error())
+	}
+	var ambiguous *ambiguousKey
+	if errors.As(err, &ambiguous) && derr == nil {
+		fmt.Fprintln(out, err)
+		return nil
+	}
+	return err
+}
+
+// openKey opens what the key names in the active multiplexer. The key
+// resolves before the desktop is asked for, so an unbound key is
+// reported as such wherever the desktop backend is missing.
+func openKey(newDesktop func() (desktop, error), spaces []Space, key string, out io.Writer) error {
 	active, err := activeMultiplexer()
 	if err != nil {
 		return err
 	}
 	h, err := resolveKey(spaces, key, active)
-	var ambiguous *ambiguousKey
-	if errors.As(err, &ambiguous) {
-		d, derr := newDesktop()
-		if derr != nil {
-			return err
-		}
-		fmt.Fprintln(out, err)
-		return d.notify("spaces", err.Error())
-	}
 	if err != nil {
 		return err
 	}
