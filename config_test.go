@@ -191,7 +191,7 @@ func TestPathListResolve(t *testing.T) {
 func TestConfigFiles(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", root)
-	dir := filepath.Join(root, "tmux-spaces")
+	dir := filepath.Join(root, "spaces")
 	if err := os.MkdirAll(filepath.Join(dir, "spaces.d"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -213,6 +213,38 @@ func TestConfigFiles(t *testing.T) {
 	}
 	if spaces, err := loadSpaces(); err != nil || len(spaces) != 0 {
 		t.Errorf("loadSpaces() = %v, %v", spaces, err)
+	}
+}
+
+// The tool read ~/.config/tmux-spaces before it was called spaces; a
+// machine still keeping its config there gets told, not an empty list.
+func TestConfigMovedFromTmuxSpaces(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", root)
+	old := filepath.Join(root, "tmux-spaces", "spaces.d")
+	if err := os.MkdirAll(old, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(old, "a.yaml"), []byte("spaces:\n  app: {windows: [shell]}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := loadSpaces()
+	if err == nil || !strings.Contains(err.Error(), "config moved: "+filepath.Join(root, "tmux-spaces")+" → "+filepath.Join(root, "spaces")+"; move the files") {
+		t.Errorf("old config dir only: err = %v", err)
+	}
+	// An empty new directory beside it is the same situation.
+	if err := os.MkdirAll(filepath.Join(root, "spaces", "spaces.d"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadSpaces(); err == nil || !strings.Contains(err.Error(), "config moved") {
+		t.Errorf("empty new dir beside the old one: err = %v", err)
+	}
+	// Once a file lives in the new place, the old directory is history.
+	if err := os.WriteFile(filepath.Join(root, "spaces", "spaces.d", "a.yaml"), []byte("spaces:\n  app: {windows: [shell]}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if spaces, err := loadSpaces(); err != nil || len(spaces) != 1 {
+		t.Errorf("moved config: %v, %v", spaces, err)
 	}
 }
 

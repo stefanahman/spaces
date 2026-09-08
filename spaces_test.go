@@ -36,7 +36,7 @@ func startTmux(t *testing.T) {
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux not installed")
 	}
-	sockDir, err := os.MkdirTemp("", "tmux-spaces")
+	sockDir, err := os.MkdirTemp("", "spaces")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -352,7 +352,7 @@ func TestOpenLaunchesAnApplication(t *testing.T) {
 
 func TestOpenReportsAMissingProgram(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	sp := Space{Name: "ghost", Command: argv{"no-such-program-tmux-spaces"}}
+	sp := Space{Name: "ghost", Command: argv{"no-such-program-spaces"}}
 	d := newFakeDesktop()
 	err := open(d, sp, false, &strings.Builder{})
 	if err == nil || !strings.Contains(err.Error(), "not found on PATH") {
@@ -476,7 +476,7 @@ func TestLockSpaceSerialises(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f, err := os.Open(filepath.Join(os.Getenv("XDG_CACHE_HOME"), "tmux-spaces", "bf-1.lock"))
+	f, err := os.Open(filepath.Join(os.Getenv("XDG_CACHE_HOME"), "spaces", "bf-1.lock"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -502,17 +502,17 @@ func TestCheck(t *testing.T) {
 		{Name: "b", Space: 9, Cwd: pathList{dir}, Windows: shell},
 		{Name: "c", Cwd: pathList{missing}, Windows: shell},
 		{Name: "d", Space: 2, Cwd: pathList{dir}, Windows: shell},
-		{Name: "e", Command: argv{"no-such-program-tmux-spaces", "--flag"}},
+		{Name: "e", Command: argv{"no-such-program-spaces", "--flag"}},
 		{Name: "f", Cwd: pathList{dir}, Command: argv{"sh"}},
-		{Name: "g", Space: 3, App: "No Such App (tmux-spaces)"},
+		{Name: "g", Space: 3, App: "No Such App (spaces)"},
 	}
 	var out strings.Builder
 	err := check(d, spaces, &out)
 	for _, want := range []string{
 		"error: b: desktop space 9 does not exist (this desktop has 1..3)",
 		"error: c: none of cwd [" + missing + "] exists",
-		"error: e: command \"no-such-program-tmux-spaces\" not found on PATH",
-		"error: g: no No Such App (tmux-spaces).app in /Applications, ~/Applications or /System/Applications",
+		"error: e: command \"no-such-program-spaces\" not found on PATH",
+		"error: g: no No Such App (spaces).app in /Applications, ~/Applications or /System/Applications",
 		"warning: desktop space 2 is claimed by a, d",
 	} {
 		if !strings.Contains(out.String(), want) {

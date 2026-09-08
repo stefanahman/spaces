@@ -1,4 +1,4 @@
-module github.com/stefanahman/tmux-spaces
+module github.com/stefanahman/spaces
 
 go 1.25.0
 

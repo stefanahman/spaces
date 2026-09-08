@@ -142,7 +142,7 @@ func openApp(d desktop, sp Space, then bool, out io.Writer) error {
 
 // runThenCommand runs a command or app space's `then` through the
 // shell, in the background like runThen. Its output goes where
-// tmux-spaces's does: there is no session for tmux to show it in.
+// spaces's does: there is no session for tmux to show it in.
 func runThenCommand(sp Space) error {
 	cmd := exec.Command("/bin/sh", "-c", sp.Then)
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
@@ -179,16 +179,16 @@ func lockSpace(name string) (unlock func(), err error) {
 	}, nil
 }
 
-// lockDir is $XDG_CACHE_HOME/tmux-spaces, else the OS cache dir.
+// lockDir is $XDG_CACHE_HOME/spaces, else the OS cache dir.
 func lockDir() (string, error) {
 	if base := os.Getenv("XDG_CACHE_HOME"); base != "" {
-		return filepath.Join(base, "tmux-spaces"), nil
+		return filepath.Join(base, "spaces"), nil
 	}
 	base, err := os.UserCacheDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(base, "tmux-spaces"), nil
+	return filepath.Join(base, "spaces"), nil
 }
 
 // list prints every space with its session state (for a command or

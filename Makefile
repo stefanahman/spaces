@@ -3,11 +3,11 @@ BIN ?= $(HOME)/.local/bin
 .PHONY: build install test lint
 
 build:
-	go build -o tmux-spaces .
+	go build -o spaces .
 
 install:
 	mkdir -p $(BIN)
-	go build -o $(BIN)/tmux-spaces .
+	go build -o $(BIN)/spaces .
 
 test:
 	go test ./...

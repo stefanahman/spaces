@@ -13,17 +13,17 @@ import (
 // dir, key dispatch failures.
 func TestCLI(t *testing.T) {
 	root := t.TempDir()
-	bin := filepath.Join(root, "bin", "tmux-spaces")
+	bin := filepath.Join(root, "bin", "spaces")
 	if err := os.MkdirAll(filepath.Dir(bin), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)
 	}
-	if err := os.MkdirAll(filepath.Join(root, "tmux-spaces", "spaces.d"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "spaces", "spaces.d"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "tmux-spaces", "spaces.d", "a.yaml"), []byte("spaces:\n  app: {key: a, space: 3, windows: [shell]}\n  herdr: {key: h, space: 7, command: herdr --session work}\n  cmux: {key: c, space: 8, app: cmux}\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "spaces", "spaces.d", "a.yaml"), []byte("spaces:\n  app: {key: a, space: 3, windows: [shell]}\n  herdr: {key: h, space: 7, command: herdr --session work}\n  cmux: {key: c, space: 8, app: cmux}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	run := func(args ...string) (string, int) {
@@ -46,8 +46,8 @@ func TestCLI(t *testing.T) {
 		{nil, 64, "usage:"},
 		{[]string{"bogus"}, 64, "unknown command"},
 		{[]string{"open"}, 64, "expected a space name"},
-		{[]string{"--version"}, 0, "tmux-spaces"},
-		{[]string{"config", "path"}, 0, filepath.Join(root, "tmux-spaces")},
+		{[]string{"--version"}, 0, "spaces"},
+		{[]string{"config", "path"}, 0, filepath.Join(root, "spaces")},
 		{[]string{"yabai-rules"}, 0, `yabai -m rule --add app="^Ghostty$" title="^app$" space=^3`},
 		{[]string{"yabai-rules"}, 0, `yabai -m rule --add app="^Ghostty$" title="^herdr$" space=^7`},
 		{[]string{"yabai-rules"}, 0, `yabai -m rule --add app="^cmux$" space=^8`},
@@ -61,7 +61,7 @@ func TestCLI(t *testing.T) {
 		}
 	}
 	// A broken config fails every verb that reads it, with the file named.
-	if err := os.WriteFile(filepath.Join(root, "tmux-spaces", "spaces.d", "b.yaml"), []byte("spaces:\n  app: {key: b, windows: [shell]}\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "spaces", "spaces.d", "b.yaml"), []byte("spaces:\n  app: {key: b, windows: [shell]}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if out, code := run("list"); code != 1 || !strings.Contains(out, `space "app" is declared in both`) {

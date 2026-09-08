@@ -1,4 +1,4 @@
-// Configuration: every *.yaml in $XDG_CONFIG_HOME/tmux-spaces/spaces.d/
+// Configuration: every *.yaml in $XDG_CONFIG_HOME/spaces/spaces.d/
 // plus an optional spaces.yaml next to it, merged. Each file declares
 // spaces under a `spaces:` mapping; a name or key declared twice
 // anywhere is an error — never a silent override — because the files
@@ -162,7 +162,7 @@ func expand(p string) string {
 	return os.ExpandEnv(p)
 }
 
-// configDir is $XDG_CONFIG_HOME/tmux-spaces, else ~/.config/tmux-spaces.
+// configDir is $XDG_CONFIG_HOME/spaces, else ~/.config/spaces.
 func configDir() (string, error) {
 	base := os.Getenv("XDG_CONFIG_HOME")
 	if base == "" {
@@ -172,11 +172,12 @@ func configDir() (string, error) {
 		}
 		base = filepath.Join(home, ".config")
 	}
-	return filepath.Join(base, "tmux-spaces"), nil
+	return filepath.Join(base, "spaces"), nil
 }
 
 // configFiles lists the files that are read, in order: spaces.yaml,
-// then spaces.d/*.yaml sorted by name. Missing files are fine.
+// then spaces.d/*.yaml sorted by name. Missing files are fine — unless
+// they sit where the tool's former name, tmux-spaces, read them.
 func configFiles() ([]string, error) {
 	dir, err := configDir()
 	if err != nil {
@@ -191,7 +192,14 @@ func configFiles() ([]string, error) {
 		return nil, err
 	}
 	sort.Strings(more)
-	return append(files, more...), nil
+	files = append(files, more...)
+	if len(files) == 0 {
+		old := filepath.Join(filepath.Dir(dir), "tmux-spaces")
+		if _, err := os.Stat(old); err == nil {
+			return nil, fmt.Errorf("config moved: %s → %s; move the files", old, dir)
+		}
+	}
+	return files, nil
 }
 
 // loadSpaces reads and merges every config file.
