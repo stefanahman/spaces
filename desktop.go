@@ -97,30 +97,37 @@ func findYabaiWindow(match func(yabaiWindow) bool) (string, error) {
 }
 
 // launch opens the application through LaunchServices, each env entry
-// as an --env, which `open` passes into the process it starts. On an
-// app that already runs (macOS keeps one alive with no windows) this
-// activates it, which reopens a window for most apps — with the
-// environment it was first started with.
+// as an --env, which `open` passes into the process it starts — on top
+// of the caller's own environment, which `open` passes on whole, so
+// the caller's is the launch environment. On an app that already runs
+// (macOS keeps one alive with no windows) this activates it, which
+// reopens a window for most apps — with the environment it was first
+// started with.
 func (yabaiGhostty) launch(app string, env []string) error {
 	var args []string
 	for _, e := range env {
 		args = append(args, "--env", e)
 	}
-	_, err := runOut(exec.Command("open", append(args, "-a", app)...))
+	cmd := exec.Command("open", append(args, "-a", app)...)
+	cmd.Env = launchEnv()
+	_, err := runOut(cmd)
 	return err
 }
 
 // spawn opens Ghostty through LaunchServices (the only way to start a
 // new Ghostty window from the CLI on macOS). argv runs directly in the
 // new window, with no shell in between, so pass absolute paths: the
-// window's PATH is LaunchServices', not the shell's.
+// window's PATH is LaunchServices', not the shell's. The rest of the
+// program's environment is the launch environment, through `open`.
 func (yabaiGhostty) spawn(title, cwd string, argv []string) error {
 	args := []string{"-na", "Ghostty", "--args", "--title=" + title}
 	if cwd != "" {
 		args = append(args, "--working-directory="+cwd)
 	}
 	args = append(append(args, "-e"), argv...)
-	_, err := runOut(exec.Command("open", args...))
+	cmd := exec.Command("open", args...)
+	cmd.Env = launchEnv()
+	_, err := runOut(cmd)
 	return err
 }
 

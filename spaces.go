@@ -172,10 +172,12 @@ func openApp(d desktop, sp Space, then bool, selectWS string, out io.Writer) err
 }
 
 // runThenCommand runs a command or app space's `then` through the
-// shell, in the background like runThen. Its output goes where
-// spaces's does: there is no session for tmux to show it in.
+// shell, in the background like runThen, with the launch environment:
+// a `then` starts things too. Its output goes where spaces's does:
+// there is no session for tmux to show it in.
 func runThenCommand(sp Space) error {
 	cmd := exec.Command("/bin/sh", "-c", sp.Then)
+	cmd.Env = launchEnv()
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("%s: then: %w", sp.Name, err)

@@ -13,9 +13,15 @@ import (
 )
 
 // tmux runs a tmux command and returns trimmed stdout. Errors carry
-// tmux's stderr, which is where the useful message is.
+// tmux's stderr, which is where the useful message is. The client
+// gets the launch environment: a server it starts keeps the client's
+// environment for every window it will ever open, and with TMUX
+// dropped it is the default server that is addressed — the one the
+// spaces live in — not the server of a tmux this runs inside.
 func tmux(args ...string) (string, error) {
-	return runOut(exec.Command("tmux", args...))
+	cmd := exec.Command("tmux", args...)
+	cmd.Env = launchEnv()
+	return runOut(cmd)
 }
 
 func runOut(cmd *exec.Cmd) (string, error) {
