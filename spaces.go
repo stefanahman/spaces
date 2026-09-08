@@ -345,7 +345,7 @@ func check(d desktop, spaces []Space, out io.Writer) error {
 			}
 		}
 		if sp.isApp() && !appBundleExists(sp.App) {
-			fmt.Fprintf(out, "error: %s: no %s.app in /Applications or ~/Applications\n", sp.Name, sp.App)
+			fmt.Fprintf(out, "error: %s: no %s.app in /Applications, ~/Applications or /System/Applications\n", sp.Name, sp.App)
 			problems++
 		}
 		for _, w := range sp.Windows {

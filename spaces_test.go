@@ -508,7 +508,7 @@ func TestCheck(t *testing.T) {
 		"error: b: desktop space 9 does not exist (this desktop has 1..3)",
 		"error: c: none of cwd [" + missing + "] exists",
 		"error: e: command \"no-such-program-tmux-spaces\" not found on PATH",
-		"error: g: no No Such App (tmux-spaces).app in /Applications or ~/Applications",
+		"error: g: no No Such App (tmux-spaces).app in /Applications, ~/Applications or /System/Applications",
 		"warning: desktop space 2 is claimed by a, d",
 	} {
 		if !strings.Contains(out.String(), want) {

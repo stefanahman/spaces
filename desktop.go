@@ -157,11 +157,12 @@ func (yabaiGhostty) requirements() []requirement {
 	}
 }
 
-// appBundleExists reports whether <name>.app is installed in
-// /Applications or ~/Applications, where `open -a` and `check` look.
+// appBundleExists reports whether <name>.app is installed where
+// applications live: /Applications, ~/Applications, or
+// /System/Applications for the ones macOS ships (Mail, Notes, …).
 func appBundleExists(name string) bool {
 	home, _ := os.UserHomeDir()
-	for _, dir := range []string{"/Applications", filepath.Join(home, "Applications")} {
+	for _, dir := range []string{"/Applications", filepath.Join(home, "Applications"), "/System/Applications"} {
 		if _, err := os.Stat(filepath.Join(dir, name+".app")); err == nil {
 			return true
 		}
