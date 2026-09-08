@@ -1,8 +1,9 @@
 // Configuration: every *.yaml in $XDG_CONFIG_HOME/spaces/spaces.d/
 // plus an optional spaces.yaml next to it, merged. Each file declares
-// spaces under a `spaces:` mapping; a name or key declared twice
-// anywhere is an error — never a silent override — because the files
-// typically come from different sources (one per dotfiles branch).
+// spaces under a `spaces:` mapping; a name declared twice anywhere,
+// or a key bound twice within one multiplexer, is an error — never a
+// silent override — because the files typically come from different
+// sources (one per dotfiles branch).
 package main
 
 import (

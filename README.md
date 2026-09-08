@@ -50,23 +50,45 @@ a small interface so a Hyprland one can follow.
 
 ```sh
 brew install --cask stefanahman/tap/spaces
-go install github.com/stefanahman/spaces@latest   # with Go 1.25
+go install github.com/stefanahman/spaces@latest   # with Go 1.26
 ```
 
-or from a checkout, `make install BIN=~/.local/bin`. Needs tmux, yabai
-and Ghostty; `spaces check` tells you what's missing.
+or from a checkout, `make install BIN=~/.local/bin`. The cask puts the
+binary in Homebrew's bin (`/opt/homebrew/bin/spaces`); the paths below
+assume that — use `~/.local/bin/spaces` after `make install`.
+
+It needs tmux, [yabai](https://github.com/koekeishiya/yabai) with its
+accessibility permission granted, and [Ghostty](https://ghostty.org):
+
+```sh
+brew install tmux koekeishiya/formulae/yabai
+brew install --cask ghostty
+```
+
+`spaces check` tells you what's missing. For workspaces inside herdr
+or cmux (below), the herdr or cmux install is the prerequisite; cmux's
+cask links its `cmux` command, which spaces drives.
+
+Files it keeps: the config in `$XDG_CONFIG_HOME/spaces/`, the active
+multiplexer in `$XDG_STATE_HOME/spaces/multiplexer`, per-space locks in
+`$XDG_CACHE_HOME/spaces/` (with `~/.config`, `~/.local/state` and the
+OS cache dir as the defaults).
 
 ## Config
 
 `$XDG_CONFIG_HOME/spaces/spaces.yaml` and every
-`$XDG_CONFIG_HOME/spaces/spaces.d/*.yaml` are merged. A space or a
-key declared twice is an error, never a silent override — the files
-usually come from different places (one per dotfiles branch, one per
-machine).
+`$XDG_CONFIG_HOME/spaces/spaces.d/*.yaml` are merged. A space declared
+twice is an error, and so is a key bound twice within one multiplexer
+(see *Switching multiplexer*) — never a silent override, since the
+files usually come from different places (one per dotfiles branch,
+one per machine).
+
+The three kinds of space, every key annotated (a schema, not a file:
+the names are placeholders):
 
 ```yaml
 spaces:
-  <name>:                     # letters, digits, - and _: the tmux session name and the terminal window's title
+  <tmux-space>:               # letters, digits, - and _: the tmux session name and the terminal window's title
     key: r                    # one of 0-9 a-z, for `spaces key r`; optional
     space: 9                  # desktop space the window is pinned to; omit to leave it where it opens
     cwd: ~/src/app            # default directory for windows, panes and the terminal; a string or a list of candidates
@@ -78,14 +100,14 @@ spaces:
       - name: pair
         split: horizontal     # side by side (default) or vertical
         panes:
-          - {cwd: ~/src/eden}
-          - {cwd: ~/src/eden-private-branches, command: nvim}
+          - {cwd: ~/src/app}
+          - {cwd: ~/src/docs, command: nvim}
     select: work              # window selected when the session is created; default: the first
     then: tmux display-popup -E -w 88% -h 84% pr-owl   # run after `open` has focused the space
-  <name>:
+  <command-space>:
     command: herdr --session work   # instead of windows: the terminal runs this program, no tmux session
-    then: ~/.local/bin/herdr-work   # runs through `sh -c` once the window is in front
-  <name>:
+    then: say "herdr is up"         # runs through `sh -c` once the window is in front
+  <app-space>:
     app: cmux                       # instead of windows or command: a macOS application, pinned by its name
     env: {CMUX_SOCKET_MODE: allowAll}   # its environment when this space launches it
 ```
@@ -108,8 +130,8 @@ session for tmux to show its output in, it goes where spaces's
 does. `windows`, `select` and `command` don't mix.
 
 **`app`.** A space can also be an application — its name as the
-window manager reports it and `open -a` accepts it, `Slack` or `Bardo
-Backstage (Beta)`. `open` focuses the application's first window, and
+window manager reports it and `open -a` accepts it, `Slack` or `Visual
+Studio Code`. `open` focuses the application's first window, and
 launches the application when it has none (macOS keeps an application
 alive with no windows; `open -a` then activates it, which reopens one
 for most apps). `then` runs as for a command space. No `cwd`, no
@@ -132,7 +154,9 @@ build inside it, with the same `windows` and `panes` schema a tmux
 space uses. Declared once, they are built where they are missing and
 left alone where they exist: neither herdr nor cmux knows a startup
 layout, and both bring their workspaces back across a restart as
-shells without their programs.
+shells without their programs. The building goes through
+[mux](https://github.com/stefanahman/mux)'s drivers. A YAML anchor
+declares the context once for both:
 
 ```yaml
 spaces:
@@ -142,22 +166,23 @@ spaces:
     command: herdr --session work
     multiplexer: herdr            # what renders `workspaces`: herdr or cmux
     session: work                 # herdr only: its socket is ~/.config/herdr/sessions/<session>/herdr.sock
-    workspaces:
-      bf-1: {cwd: ~/src/app, windows: [shell, {name: nvim, command: nvim}]}
-      eden:
-        cwd: ~/src/eden
+    workspaces: &work
+      app: {cwd: ~/src/app, windows: [shell, {name: nvim, command: nvim}]}
+      docs:
+        cwd: ~/src/docs
         windows:
-          - {name: eden, panes: [{}, {cwd: ~/src/eden-private-branches}]}
-          - {name: nvim, command: nvim, cwd: ~/src/eden-private-branches}
-      pr-owl: {cwd: ~/src/app, windows: [{name: pr-owl, command: pr-owl --mux herdr}]}
+          - {name: docs, panes: [{}, {cwd: ~/src/docs/site}]}
+          - {name: nvim, command: nvim, cwd: ~/src/docs/site}
+      pr-owl: {cwd: ~/src/app, windows: [{name: pr-owl, command: pr-owl}]}   # pr-owl detects the multiplexer it runs in
     select: pr-owl                # the workspace shown when the space opens
   cmux:
     key: c
     space: 8
     app: cmux
-    env: {CMUX_SOCKET_MODE: allowAll}
+    env: {CMUX_SOCKET_MODE: allowAll}   # cmux takes its socket mode from the environment only
     multiplexer: cmux
-    workspaces: ...the same shape...
+    workspaces: *work
+    select: pr-owl
 ```
 
 `open` and `focus` both build the workspaces once the window is up
@@ -171,13 +196,17 @@ downward). What exists is found by name (workspaces) or by position
 into a pane that runs nothing but its shell: a program already
 running is left running, and a pane running anything else is left
 alone and said so on stderr — keystrokes into a program are commands
-to it. A shell still starting up gets a few seconds to turn out idle.
-Under cmux the check is per pane, not per tab: cmux files every
-process of a pane under its first surface. The multiplexer gets 20
-seconds to answer after its launch.
+to it. A pane this run created is a new shell and is typed into
+without a look; the line waits in the pty for the prompt. Under cmux
+the look is `ps` on the surface's tty where cmux knows it (the
+surface a workspace was created with) and the tab's title otherwise —
+cmux's shell integration names the running program there, or the
+directory at a prompt. The multiplexer gets 20 seconds to answer
+after its launch, and is read three times per run, not per workspace:
+a key press costs a fraction of a second.
 
-`multiplexer` is required with `workspaces` and pointless without;
-`session` applies to herdr. `select` names a workspace.
+`multiplexer` and `workspaces` come together, each an error without
+the other; `session` applies to herdr. `select` names a workspace.
 
 **Switching multiplexer.** A workspace inside a herdr or cmux space
 can carry a `key:` too, and one key may be bound once per multiplexer
@@ -188,7 +217,7 @@ multiplexer*: one word in `$XDG_STATE_HOME/spaces/multiplexer`
 
 ```yaml
 spaces:
-  bf-1:
+  app:
     key: "1"                      # the tmux space
     space: 3
     windows: [shell, {name: nvim, command: nvim}]
@@ -197,8 +226,9 @@ spaces:
     space: 7
     command: herdr --session work
     multiplexer: herdr
+    session: work
     workspaces:
-      bf-1: {key: "1", cwd: ~/src/app, windows: [shell, {name: nvim, command: nvim}]}   # the same key, in herdr
+      app: {key: "1", cwd: ~/src/app, windows: [shell, {name: nvim, command: nvim}]}   # the same key, in herdr
       pr-owl: {key: r, cwd: ~/src/app, windows: [{name: pr-owl, command: pr-owl}]}
     select: pr-owl
 ```
@@ -208,7 +238,7 @@ one marked, and on a terminal asks which to use — a number or a name;
 an empty answer leaves it. `spaces use cmux` sets it outright. A
 change is printed and shown as a desktop notification. `spaces key 1`
 then opens the holder in the active multiplexer: the tmux space, or
-the herdr space on its bf-1 workspace, which lands on that workspace
+the herdr space on its `app` workspace, which lands on that workspace
 instead of the space's `select`. A key bound in only one multiplexer
 opens there whatever is active — `r` above, or a space's own key. A
 key bound in several with none of them active is refused, naming
@@ -246,7 +276,7 @@ so the rule pins whatever window the application opens.
 **yabai.** In `yabairc`:
 
 ```sh
-eval "$($HOME/.local/bin/spaces yabai-rules)"   # absolute path: yabai starts with a minimal PATH
+eval "$(/opt/homebrew/bin/spaces yabai-rules)"   # absolute path: yabai starts with a minimal PATH
 ```
 
 Rules fire when a window is *created*; `open` also moves a freshly
@@ -256,12 +286,22 @@ reloads.
 **Hotkeys.** With [skhd](https://github.com/koekeishiya/skhd):
 
 ```
-rctrl + ralt + rcmd - r : $HOME/.local/bin/spaces open pr-reviews
+rctrl + ralt + rcmd - r : /opt/homebrew/bin/spaces open pr-reviews
 ```
 
-With a Karabiner-Elements leader (`Hyper+X`, then a key), each key's
-`shell_command` is `$HOME/.local/bin/spaces key <k>` — the keys
-themselves live in the config.
+With a Karabiner-Elements leader (a modifier chord, then a key), each
+key's `shell_command` is `/opt/homebrew/bin/spaces key <k>` — the keys
+themselves live in the config, so the Karabiner rules never change. One
+such rule, for the key `1` after a leader that set the variable
+`spaces_leader`:
+
+```json
+{ "type": "basic",
+  "from": { "key_code": "1" },
+  "conditions": [{ "type": "variable_if", "name": "spaces_leader", "value": 1 }],
+  "to": [{ "set_variable": { "name": "spaces_leader", "value": 0 } },
+         { "shell_command": "/opt/homebrew/bin/spaces key 1" }] }
+```
 
 Hotkey daemons run commands with the base PATH (Karabiner's
 `shell_command` gets `/usr/bin:/bin:/usr/sbin:/sbin`), so spaces
@@ -270,11 +310,17 @@ tmux and yabai there without a login shell in between; your PATH still
 comes first. The tmux server it starts inherits that PATH, which is
 one more reason `then` wants absolute paths.
 
-**pr-owl.** `hooks.after_open: ~/.local/bin/spaces focus pr-reviews`
-brings the review terminal to the front after every
-[pr-owl](https://github.com/stefanahman/pr-owl) open, and a `pr-reviews`
-space with `then: tmux display-popup … pr-owl` is the hotkey that opens
-the popup from anywhere.
+**Claude state.** The `CLAUDE` column of `list` reads the
+`@claude-state` window option that
+[tmux-claude-status](https://github.com/stefanahman/tmux-claude-status)
+maintains from Claude Code's hooks; without the plugin the column is
+empty and everything else works.
+
+**pr-owl.** `pr-reviews` is [pr-owl](https://github.com/stefanahman/pr-owl)'s
+review session, one tmux window per pull request. A `pr-reviews` space
+with `then: tmux display-popup … pr-owl` is the hotkey that opens its
+popup from anywhere, and pr-owl's `hooks.after_open: {tmux: spaces
+focus pr-reviews}` brings that terminal to the front after every open.
 
 ## Hacking
 
@@ -287,8 +333,8 @@ The macOS backend is `desktop.go`; a Linux one implements the same
 small interface: find the terminal window by title or an application's
 by name, spawn a terminal running a command (tmux attaching to the
 session, or the space's program), launch an application, move a window
-to a workspace, focus it, and — for `check` — list the workspaces and
-the tools it needs.
+to a desktop space, focus it, and — for `check` — list the desktop
+spaces and the tools it needs.
 
 ## License
 

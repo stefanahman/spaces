@@ -1,4 +1,4 @@
-// The verbs: open, focus, key, list, yabai-rules, check.
+// The verbs: open, focus, key, use, list, yabai-rules, check, config path.
 package main
 
 import (
