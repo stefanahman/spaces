@@ -25,17 +25,33 @@ import (
 // for programs that are multiplexers themselves, like herdr — or an
 // application's window (app).
 type Space struct {
-	Name    string   `yaml:"-"`
-	Key     string   `yaml:"key"`
-	Space   int      `yaml:"space"` // desktop space; 0 = not pinned
-	Cwd     pathList `yaml:"cwd"`
-	Windows []Window `yaml:"windows"`
-	Command argv     `yaml:"command"` // runs in the terminal instead of a tmux session
-	App     string   `yaml:"app"`     // an application, by name, instead of a terminal
-	Select  string   `yaml:"select"`  // window selected when the session is created; default: the first
-	Then    string   `yaml:"then"`    // run after `open` has focused the space
+	Name    string            `yaml:"-"`
+	Key     string            `yaml:"key"`
+	Space   int               `yaml:"space"` // desktop space; 0 = not pinned
+	Cwd     pathList          `yaml:"cwd"`
+	Windows []Window          `yaml:"windows"`
+	Command argv              `yaml:"command"` // runs in the terminal instead of a tmux session
+	App     string            `yaml:"app"`     // an application, by name, instead of a terminal
+	Env     map[string]string `yaml:"env"`     // environment the application is launched with (app spaces only)
+	Select  string            `yaml:"select"`  // window selected when the session is created; default: the first
+	Then    string            `yaml:"then"`    // run after `open` has focused the space
 
 	file string // where it was declared, for error messages
+}
+
+// envList renders env as KEY=VALUE entries, values expanded like paths
+// (~ and $VAR), sorted by name so a launch is the same every time.
+func (sp Space) envList() []string {
+	names := make([]string, 0, len(sp.Env))
+	for name := range sp.Env {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	env := make([]string, len(names))
+	for i, name := range names {
+		env[i] = name + "=" + expand(sp.Env[name])
+	}
+	return env
 }
 
 // isCommand reports whether the space runs its command in the terminal
@@ -259,6 +275,9 @@ var validName = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 // reads specially beyond what yabaiRegex escapes.
 var validApp = regexp.MustCompile(`^[A-Za-z0-9 ()._-]+$`)
 
+// validEnvName is what an environment variable may be called.
+var validEnvName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
 // validate checks one space's shape; paths are checked by `check`
 // and at open time, because they differ per machine.
 func (sp Space) validate() error {
@@ -292,6 +311,13 @@ func (sp Space) validate() error {
 		return errors.New("cwd applies to windows and command; an app space has none")
 	case sp.isApp() && sp.Select != "":
 		return errors.New("select picks a window; an app space has none")
+	case len(sp.Env) > 0 && !sp.isApp():
+		return errors.New("env applies to app spaces; a tmux window inherits the server's environment, a command runs in Ghostty's")
+	}
+	for name := range sp.Env {
+		if !validEnvName.MatchString(name) {
+			return fmt.Errorf("env: %q is not a variable name", name)
+		}
 	}
 	seen := map[string]bool{}
 	for i, w := range sp.Windows {

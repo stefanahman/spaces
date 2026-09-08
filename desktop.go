@@ -27,8 +27,9 @@ type desktop interface {
 	// spawn opens a new terminal window with that title, in cwd,
 	// running argv.
 	spawn(title, cwd string, argv []string) error
-	// launch starts the application, or activates it when it runs.
-	launch(app string) error
+	// launch starts the application with the KEY=VALUE entries of env
+	// added to its environment, or activates it when it runs.
+	launch(app string, env []string) error
 	// moveToSpace pins the window to a desktop space.
 	moveToSpace(id string, space int) error
 	// focus brings the window to the front.
@@ -92,11 +93,17 @@ func findYabaiWindow(match func(yabaiWindow) bool) (string, error) {
 	return "", nil
 }
 
-// launch opens the application through LaunchServices. On an app
-// that already runs (macOS keeps one alive with no windows) this
-// activates it, which reopens a window for most apps.
-func (yabaiGhostty) launch(app string) error {
-	_, err := runOut(exec.Command("open", "-a", app))
+// launch opens the application through LaunchServices, each env entry
+// as an --env, which `open` passes into the process it starts. On an
+// app that already runs (macOS keeps one alive with no windows) this
+// activates it, which reopens a window for most apps — with the
+// environment it was first started with.
+func (yabaiGhostty) launch(app string, env []string) error {
+	var args []string
+	for _, e := range env {
+		args = append(args, "--env", e)
+	}
+	_, err := runOut(exec.Command("open", append(args, "-a", app)...))
 	return err
 }
 

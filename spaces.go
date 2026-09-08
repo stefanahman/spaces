@@ -113,7 +113,7 @@ func openApp(d desktop, sp Space, then bool, out io.Writer) error {
 	}
 	launched := id == ""
 	if launched {
-		if err := d.launch(sp.App); err != nil {
+		if err := d.launch(sp.App, sp.envList()); err != nil {
 			return err
 		}
 		find := func() (string, error) { return d.findAppWindow(sp.App) }

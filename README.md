@@ -85,7 +85,8 @@ spaces:
     command: herdr --session work   # instead of windows: the terminal runs this program, no tmux session
     then: ~/.local/bin/herdr-work   # runs through `sh -c` once the window is in front
   <name>:
-    app: Slack                      # instead of windows or command: a macOS application, pinned by its name
+    app: cmux                       # instead of windows or command: a macOS application, pinned by its name
+    env: {CMUX_SOCKET_MODE: allowAll}   # its environment when this space launches it
 ```
 
 `~` and `$VAR` are expanded. `then` runs through `tmux run-shell` inside
@@ -112,6 +113,17 @@ launches the application when it has none (macOS keeps an application
 alive with no windows; `open -a` then activates it, which reopens one
 for most apps). `then` runs as for a command space. No `cwd`, no
 `select`; `windows`, `command` and `app` don't mix.
+
+`env` is for an application that takes its configuration from the
+environment — cmux opens its socket to outside processes only when
+launched with `CMUX_SOCKET_MODE=allowAll`, and ignores the setting file
+for that. Each entry becomes an `--env KEY=VALUE` to `open -a`, sorted
+by name; values expand `~` and `$VAR`. The variables reach only the
+launch this space performs: the same application started from the
+Dock or Spotlight does not have them, and an application that is
+already running is only activated. `env` is an error on `windows` and
+`command` spaces, where it would not do what it says — a tmux window
+inherits the server's environment, a command runs in Ghostty's.
 
 ## Commands
 

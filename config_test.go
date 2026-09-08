@@ -50,6 +50,7 @@ spaces:
     key: c
     space: 8
     app: cmux
+    env: {CMUX_SOCKET_MODE: allowAll, CMUX_HOME: ~/cmux}
     then: ~/.local/bin/cmux-setup
 `)},
 	})
@@ -73,8 +74,12 @@ spaces:
 	if note, _ := find(spaces, "note"); !reflect.DeepEqual(note.Command, argv{"sh", "-c", "echo hi there"}) {
 		t.Errorf("note (a list keeps an argument with a space) = %+v", note)
 	}
-	if cmux, _ := find(spaces, "cmux"); !cmux.isApp() || cmux.App != "cmux" || cmux.Key != "c" || cmux.Space != 8 || cmux.Then == "" {
+	cmux, _ := find(spaces, "cmux")
+	if !cmux.isApp() || cmux.App != "cmux" || cmux.Key != "c" || cmux.Space != 8 || cmux.Then == "" {
 		t.Errorf("cmux = %+v", cmux)
+	}
+	if want := []string{"CMUX_HOME=/home/owl/cmux", "CMUX_SOCKET_MODE=allowAll"}; !reflect.DeepEqual(cmux.envList(), want) {
+		t.Errorf("cmux env = %v, want %v (sorted, ~ expanded)", cmux.envList(), want)
 	}
 	if want := []Window{{Name: "shell"}, {Name: "nvim", Command: "nvim"}}; !reflect.DeepEqual(bf.Windows, want) {
 		t.Errorf("bf-1 windows = %+v, want %+v", bf.Windows, want)
@@ -119,6 +124,10 @@ func TestMergeSpacesRejects(t *testing.T) {
 		"app with pipe":   {{"a.yaml", []byte("spaces:\n  x: {app: 'a|b'}\n")}},
 		"app with quote":  {{"a.yaml", []byte("spaces:\n  x: {app: 'a\"b'}\n")}},
 		"app with dollar": {{"a.yaml", []byte("spaces:\n  x: {app: 'a$b'}\n")}},
+		"env on windows":  {{"a.yaml", []byte("spaces:\n  x: {windows: [shell], env: {A: b}}\n")}},
+		"env on command":  {{"a.yaml", []byte("spaces:\n  x: {command: herdr, env: {A: b}}\n")}},
+		"env bad name":    {{"a.yaml", []byte("spaces:\n  x: {app: Slack, env: {'1A': b}}\n")}},
+		"env dashed name": {{"a.yaml", []byte("spaces:\n  x: {app: Slack, env: {A-B: b}}\n")}},
 		"window twice":    {{"a.yaml", []byte("spaces:\n  x: {windows: [shell, shell]}\n")}},
 		"nameless window": {{"a.yaml", []byte("spaces:\n  x: {windows: [{command: nvim}]}\n")}},
 		"bad split":       {{"a.yaml", []byte("spaces:\n  x: {windows: [{name: w, split: diagonal}]}\n")}},

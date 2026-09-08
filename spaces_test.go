@@ -90,8 +90,8 @@ func (d *fakeDesktop) appears(present bool, id string) (string, error) {
 	return id, nil
 }
 
-func (d *fakeDesktop) launch(app string) error {
-	d.calls = append(d.calls, "launch "+app)
+func (d *fakeDesktop) launch(app string, env []string) error {
+	d.calls = append(d.calls, strings.TrimSpace("launch "+app+" "+strings.Join(env, " ")))
 	d.apps[app] = true
 	d.pending = 2
 	return nil
@@ -321,7 +321,9 @@ func TestOpenLaunchesAnApplication(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	root := t.TempDir()
 	marker := filepath.Join(root, "then.ran")
-	sp := Space{Name: "cmux", Key: "c", Space: 8, App: "cmux", Then: "touch " + marker}
+	t.Setenv("MODE", "allowAll")
+	sp := Space{Name: "cmux", Key: "c", Space: 8, App: "cmux", Then: "touch " + marker,
+		Env: map[string]string{"CMUX_SOCKET_MODE": "$MODE", "CMUX_HOME": "~/cmux"}}
 	d := newFakeDesktop()
 	var out strings.Builder
 	if err := open(d, sp, true, &out); err != nil {
@@ -330,7 +332,9 @@ func TestOpenLaunchesAnApplication(t *testing.T) {
 	if !strings.Contains(out.String(), "cmux: app launched") {
 		t.Errorf("output: %q", out.String())
 	}
-	want := []string{"launch cmux", "move a-cmux -> 8", "focus a-cmux"}
+	home, _ := os.UserHomeDir()
+	// env entries sorted by name, values expanded like paths
+	want := []string{"launch cmux CMUX_HOME=" + home + "/cmux CMUX_SOCKET_MODE=allowAll", "move a-cmux -> 8", "focus a-cmux"}
 	if !reflect.DeepEqual(d.calls, want) {
 		t.Errorf("desktop calls = %v, want %v", d.calls, want)
 	}
