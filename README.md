@@ -1,15 +1,16 @@
-# tmux-spaces
+# spaces
 
-One config for your tmux sessions on desktop spaces. A *space* is
-exactly one window that the window manager pins to a desktop space,
-reachable by a key. Usually a terminal showing a tmux session with a
+One config for your windows on desktop spaces. A *space* is exactly
+one window that the window manager pins to a desktop space, reachable
+by a key. Usually a terminal showing a tmux session with a
 fixed window and pane layout — or, for a program that is a multiplexer
 itself, running that program directly — or an application's window,
-pinned by the application's name. Declare it once; `tmux-spaces open`
-creates what's missing and focuses what exists.
+pinned by the application's name. Declare it once; `spaces open`
+creates what's missing and focuses what exists. (Formerly tmux-spaces:
+the spaces stopped being only tmux sessions.)
 
 ```yaml
-# ~/.config/tmux-spaces/spaces.yaml
+# ~/.config/spaces/spaces.yaml
 spaces:
   app:
     key: "1"
@@ -35,10 +36,10 @@ spaces:
 ```
 
 ```sh
-tmux-spaces open app     # session `app` with windows shell + nvim, a Ghostty window on space 3, focused
-tmux-spaces open app     # again: everything exists → just focus it
-tmux-spaces key 1        # what a hotkey runs
-tmux-spaces list         # every space, its session state and what Claude Code is doing in it
+spaces open app     # session `app` with windows shell + nvim, a Ghostty window on space 3, focused
+spaces open app     # again: everything exists → just focus it
+spaces key 1        # what a hotkey runs
+spaces list         # every space, its session state and what Claude Code is doing in it
 ```
 
 Today's backend is **macOS with [yabai](https://github.com/koekeishiya/yabai)
@@ -48,17 +49,17 @@ a small interface so a Hyprland one can follow.
 ## Install
 
 ```sh
-brew install --cask stefanahman/tap/tmux-spaces
-go install github.com/stefanahman/tmux-spaces@latest   # with Go 1.25
+brew install --cask stefanahman/tap/spaces
+go install github.com/stefanahman/spaces@latest   # with Go 1.25
 ```
 
 or from a checkout, `make install BIN=~/.local/bin`. Needs tmux, yabai
-and Ghostty; `tmux-spaces check` tells you what's missing.
+and Ghostty; `spaces check` tells you what's missing.
 
 ## Config
 
-`$XDG_CONFIG_HOME/tmux-spaces/spaces.yaml` and every
-`$XDG_CONFIG_HOME/tmux-spaces/spaces.d/*.yaml` are merged. A space or a
+`$XDG_CONFIG_HOME/spaces/spaces.yaml` and every
+`$XDG_CONFIG_HOME/spaces/spaces.d/*.yaml` are merged. A space or a
 key declared twice is an error, never a silent override — the files
 usually come from different places (one per dotfiles branch, one per
 machine).
@@ -66,7 +67,7 @@ machine).
 ```yaml
 spaces:
   <name>:                     # letters, digits, - and _: the tmux session name and the terminal window's title
-    key: r                    # one of 0-9 a-z, for `tmux-spaces key r`; optional
+    key: r                    # one of 0-9 a-z, for `spaces key r`; optional
     space: 9                  # desktop space the window is pinned to; omit to leave it where it opens
     cwd: ~/src/app            # default directory for windows, panes and the terminal; a string or a list of candidates
     windows:                  # created in this order the first time; later runs add what's missing by name
@@ -103,7 +104,7 @@ program instead: a string split on whitespace, or a list when an
 argument contains a space. It is resolved on PATH and run in the
 terminal window with no shell in between. Its `then` runs through
 `sh -c`, in the background, as soon as the window is in front; with no
-session for tmux to show its output in, it goes where tmux-spaces's
+session for tmux to show its output in, it goes where spaces's
 does. `windows`, `select` and `command` don't mix.
 
 **`app`.** A space can also be an application — its name as the
@@ -154,7 +155,7 @@ so the rule pins whatever window the application opens.
 **yabai.** In `yabairc`:
 
 ```sh
-eval "$($HOME/.local/bin/tmux-spaces yabai-rules)"   # absolute path: yabai starts with a minimal PATH
+eval "$($HOME/.local/bin/spaces yabai-rules)"   # absolute path: yabai starts with a minimal PATH
 ```
 
 Rules fire when a window is *created*; `open` also moves a freshly
@@ -164,21 +165,21 @@ reloads.
 **Hotkeys.** With [skhd](https://github.com/koekeishiya/skhd):
 
 ```
-rctrl + ralt + rcmd - r : $HOME/.local/bin/tmux-spaces open pr-reviews
+rctrl + ralt + rcmd - r : $HOME/.local/bin/spaces open pr-reviews
 ```
 
 With a Karabiner-Elements leader (`Hyper+X`, then a key), each key's
-`shell_command` is `$HOME/.local/bin/tmux-spaces key <k>` — the keys
+`shell_command` is `$HOME/.local/bin/spaces key <k>` — the keys
 themselves live in the config.
 
 Hotkey daemons run commands with the base PATH (Karabiner's
-`shell_command` gets `/usr/bin:/bin:/usr/sbin:/sbin`), so tmux-spaces
+`shell_command` gets `/usr/bin:/bin:/usr/sbin:/sbin`), so spaces
 appends `/opt/homebrew/bin` and `/usr/local/bin` to its own and finds
 tmux and yabai there without a login shell in between; your PATH still
 comes first. The tmux server it starts inherits that PATH, which is
 one more reason `then` wants absolute paths.
 
-**pr-owl.** `hooks.after_open: ~/.local/bin/tmux-spaces focus pr-reviews`
+**pr-owl.** `hooks.after_open: ~/.local/bin/spaces focus pr-reviews`
 brings the review terminal to the front after every
 [pr-owl](https://github.com/stefanahman/pr-owl) open, and a `pr-reviews`
 space with `then: tmux display-popup … pr-owl` is the hotkey that opens
