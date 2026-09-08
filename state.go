@@ -14,6 +14,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"golang.org/x/term"
 )
 
 // multiplexers, in the order `use` lists them.
@@ -88,11 +90,10 @@ func declaredMultiplexers(spaces []Space) []string {
 }
 
 // stdinIsTerminal reports whether stdin is a terminal, in which case
-// `use` without an argument asks; a variable, so tests can decide.
-var stdinIsTerminal = func() bool {
-	fi, err := os.Stdin.Stat()
-	return err == nil && fi.Mode()&os.ModeCharDevice != 0
-}
+// `use` without an argument asks; a variable, so tests can decide. An
+// isatty check, not a character-device one: /dev/null is a character
+// device too.
+var stdinIsTerminal = func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
 
 // useCmd is `spaces use [tmux|herdr|cmux]`. With a name it records
 // that one. Without, it lists the multiplexers the config declares,
