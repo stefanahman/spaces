@@ -126,16 +126,72 @@ already running is only activated. `env` is an error on `windows` and
 `command` spaces, where it would not do what it says — a tmux window
 inherits the server's environment, a command runs in Ghostty's.
 
+**Workspaces inside an app.** A space whose program or application is
+a multiplexer itself — herdr, cmux — can declare the workspaces to
+build inside it, with the same `windows` and `panes` schema a tmux
+space uses. Declared once, they are built where they are missing and
+left alone where they exist: neither herdr nor cmux knows a startup
+layout, and both bring their workspaces back across a restart as
+shells without their programs.
+
+```yaml
+spaces:
+  herdr:
+    key: h
+    space: 7
+    command: herdr --session work
+    multiplexer: herdr            # what renders `workspaces`: herdr or cmux
+    session: work                 # herdr only: its socket is ~/.config/herdr/sessions/<session>/herdr.sock
+    workspaces:
+      bf-1: {cwd: ~/src/app, windows: [shell, {name: nvim, command: nvim}]}
+      eden:
+        cwd: ~/src/eden
+        windows:
+          - {name: eden, panes: [{}, {cwd: ~/src/eden-private-branches}]}
+          - {name: nvim, command: nvim, cwd: ~/src/eden-private-branches}
+      pr-owl: {cwd: ~/src/app, windows: [{name: pr-owl, command: pr-owl --mux herdr}]}
+    select: pr-owl                # the workspace shown when the space opens
+  cmux:
+    key: c
+    space: 8
+    app: cmux
+    env: {CMUX_SOCKET_MODE: allowAll}
+    multiplexer: cmux
+    workspaces: ...the same shape...
+```
+
+`open` and `focus` both build the workspaces once the window is up
+and before `then`. Workspaces are created in name order, each in the
+directory of its first window's first pane (else the window's, else
+its own). The first window is the pane a workspace comes with; every
+window after it is a tab — a herdr tab, a cmux surface — and every
+pane after a window's first a split off it (`split: vertical` splits
+downward). What exists is found by name (workspaces) or by position
+(tabs, panes) and never renamed or closed. A command is typed only
+into a pane that runs nothing but its shell: a program already
+running is left running, and a pane running anything else is left
+alone and said so on stderr — keystrokes into a program are commands
+to it. A shell still starting up gets a few seconds to turn out idle.
+Under cmux the check is per pane, not per tab: cmux files every
+process of a pane under its first surface. The multiplexer gets 20
+seconds to answer after its launch.
+
+`multiplexer` is required with `workspaces` and pointless without;
+`session` applies to herdr. `select` names a workspace. Keys belong
+to spaces, not to the workspaces inside one: Hyper+X h opens the herdr
+space on the `select` workspace, and the multiplexer's own keys move
+between the others.
+
 ## Commands
 
 | | |
 |---|---|
-| `open <name>` | ensure the session and its windows (or the program), find or spawn the terminal window — or find or launch the application — pin it to `space` when new, focus it, then run `then` |
+| `open <name>` | ensure the session and its windows (or the program), find or spawn the terminal window — or find or launch the application — pin it to `space` when new, focus it, build its workspaces, then run `then` |
 | `focus <name>` | the same without `then` — for other tools that just need the space in front |
 | `key <k>` | `open` the space bound to `k`; exit 1 when none is |
-| `list` | name, key, space, session state (for a command or app space: whether its window is open), and the [tmux-claude-status](https://github.com/stefanahman/tmux-claude-status) chip of its windows (`1⚠ 2~ 1* 3`: blocked, working, done, idle) |
+| `list` | name, key, space, session state (for a command or app space: whether its window is open, and how many of its workspaces exist), and the [tmux-claude-status](https://github.com/stefanahman/tmux-claude-status) chip of its windows (`1⚠ 2~ 1* 3`: blocked, working, done, idle) |
 | `yabai-rules` | one `yabai -m rule` per pinned space — `eval` it in your yabairc so the space number has one home |
-| `check` | missing directories, commands, applications and tools, desktop spaces that don't exist or are claimed twice |
+| `check` | missing directories (workspaces' too), commands, applications and tools, desktop spaces that don't exist or are claimed twice |
 | `config path` | the directory it reads |
 
 Exit status: 64 for a bad invocation, 1 for a failure.
