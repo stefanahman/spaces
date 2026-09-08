@@ -1,11 +1,12 @@
 # tmux-spaces
 
 One config for your tmux sessions on desktop spaces. A *space* is
-exactly one terminal window that the window manager pins to a desktop
-space, reachable by a key. It shows a tmux session with a fixed window
-and pane layout — or, for a program that is a multiplexer itself, runs
-that program directly. Declare it once; `tmux-spaces open` creates
-what's missing and focuses what exists.
+exactly one window that the window manager pins to a desktop space,
+reachable by a key. Usually a terminal showing a tmux session with a
+fixed window and pane layout — or, for a program that is a multiplexer
+itself, running that program directly — or an application's window,
+pinned by the application's name. Declare it once; `tmux-spaces open`
+creates what's missing and focuses what exists.
 
 ```yaml
 # ~/.config/tmux-spaces/spaces.yaml
@@ -27,6 +28,10 @@ spaces:
     space: 7
     cwd: ~/src/app
     command: herdr --session work      # no tmux: the window runs this program itself
+  cmux:
+    key: c
+    space: 8
+    app: cmux                          # no terminal either: an application, by name
 ```
 
 ```sh
@@ -79,6 +84,8 @@ spaces:
   <name>:
     command: herdr --session work   # instead of windows: the terminal runs this program, no tmux session
     then: ~/.local/bin/herdr-work   # runs through `sh -c` once the window is in front
+  <name>:
+    app: Slack                      # instead of windows or command: a macOS application, pinned by its name
 ```
 
 `~` and `$VAR` are expanded. `then` runs through `tmux run-shell` inside
@@ -98,16 +105,24 @@ terminal window with no shell in between. Its `then` runs through
 session for tmux to show its output in, it goes where tmux-spaces's
 does. `windows`, `select` and `command` don't mix.
 
+**`app`.** A space can also be an application — its name as the
+window manager reports it and `open -a` accepts it, `Slack` or `Bardo
+Backstage (Beta)`. `open` focuses the application's first window, and
+launches the application when it has none (macOS keeps an application
+alive with no windows; `open -a` then activates it, which reopens one
+for most apps). `then` runs as for a command space. No `cwd`, no
+`select`; `windows`, `command` and `app` don't mix.
+
 ## Commands
 
 | | |
 |---|---|
-| `open <name>` | ensure the session and its windows (or the program), find or spawn the terminal window, pin it to `space` when new, focus it, then run `then` |
+| `open <name>` | ensure the session and its windows (or the program), find or spawn the terminal window — or find or launch the application — pin it to `space` when new, focus it, then run `then` |
 | `focus <name>` | the same without `then` — for other tools that just need the space in front |
 | `key <k>` | `open` the space bound to `k`; exit 1 when none is |
-| `list` | name, key, space, session state (for a command space: whether its window is open), and the [tmux-claude-status](https://github.com/stefanahman/tmux-claude-status) chip of its windows (`1⚠ 2~ 1* 3`: blocked, working, done, idle) |
+| `list` | name, key, space, session state (for a command or app space: whether its window is open), and the [tmux-claude-status](https://github.com/stefanahman/tmux-claude-status) chip of its windows (`1⚠ 2~ 1* 3`: blocked, working, done, idle) |
 | `yabai-rules` | one `yabai -m rule` per pinned space — `eval` it in your yabairc so the space number has one home |
-| `check` | missing directories, commands and tools, desktop spaces that don't exist or are claimed twice |
+| `check` | missing directories, commands, applications and tools, desktop spaces that don't exist or are claimed twice |
 | `config path` | the directory it reads |
 
 Exit status: 64 for a bad invocation, 1 for a failure.
@@ -120,7 +135,9 @@ whatever the shells inside do with OSC title sequences. That's how the
 window is found again, and what the yabai rule keys on. A command
 space has no session to set options on, and needs none: Ghostty keeps
 the `--title` it is started with and ignores title sequences from the
-program inside.
+program inside. An app space is keyed on the application's name
+instead — `app="^cmux$"`, with `(`, `)` and `.` escaped for the regex —
+so the rule pins whatever window the application opens.
 
 **yabai.** In `yabairc`:
 
@@ -163,10 +180,11 @@ make lint
 ```
 
 The macOS backend is `desktop.go`; a Linux one implements the same
-small interface: find the terminal window by title, spawn one running
-a command (tmux attaching to the session, or the space's program),
-move it to a workspace, focus it, and — for `check` — list the
-workspaces and the tools it needs.
+small interface: find the terminal window by title or an application's
+by name, spawn a terminal running a command (tmux attaching to the
+session, or the space's program), launch an application, move a window
+to a workspace, focus it, and — for `check` — list the workspaces and
+the tools it needs.
 
 ## License
 
