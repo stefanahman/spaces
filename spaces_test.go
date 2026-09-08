@@ -79,7 +79,8 @@ func (d *fakeDesktop) findWindow(title string) (string, error) {
 }
 
 func (d *fakeDesktop) spawn(title, cwd string, argv []string) error {
-	d.calls = append(d.calls, fmt.Sprintf("spawn %s cwd=%s argv=%s", title, filepath.Base(cwd), strings.Join(argv[1:], " ")))
+	program := append([]string{filepath.Base(argv[0])}, argv[1:]...)
+	d.calls = append(d.calls, fmt.Sprintf("spawn %s cwd=%s argv=%s", title, filepath.Base(cwd), strings.Join(program, " ")))
 	d.present[title] = true
 	d.pending = 2
 	return nil
@@ -166,7 +167,7 @@ func TestOpenCreatesTheSpace(t *testing.T) {
 	if active := activeWindow(t, "bf-1"); active != "nvim" {
 		t.Errorf("selected window = %q, want nvim", active)
 	}
-	want := []string{"spawn bf-1 cwd=app argv=attach-session -t =bf-1", "move w-bf-1 -> 3", "focus w-bf-1"}
+	want := []string{"spawn bf-1 cwd=app argv=tmux attach-session -t =bf-1", "move w-bf-1 -> 3", "focus w-bf-1"}
 	if !reflect.DeepEqual(d.calls, want) {
 		t.Errorf("desktop calls = %v, want %v", d.calls, want)
 	}

@@ -151,25 +151,25 @@ func attachCommand(session string) ([]string, error) {
 	return []string{tmuxPath, "attach-session", "-t", target(session, "")}, nil
 }
 
-// ensureWindow finds the space's terminal window or spawns one, pins
-// it to the space's desktop space when it is new, and focuses it.
-// Returns whether a window was spawned.
-func ensureWindow(d desktop, sp Space) (spawned bool, err error) {
+// ensureWindow finds the space's terminal window or spawns one running
+// argv, pins it to the space's desktop space when it is new, and
+// focuses it. attached tells whether a terminal already shows the
+// space (a tmux client): then a window the window manager can't find
+// is hidden — screen locked, or the title changed by hand — not
+// missing, and spawning would only add a duplicate. Returns whether a
+// window was spawned.
+func ensureWindow(d desktop, sp Space, argv []string, attached func() bool) (spawned bool, err error) {
 	id, err := d.findWindow(sp.Name)
 	if err != nil {
 		return false, err
 	}
-	if id == "" && hasClient(sp.Name) {
-		// A terminal is attached to the session but the window manager
-		// can't show us its window (screen locked, or the title was
-		// changed by hand). Spawning would only add a duplicate.
+	if id == "" && attached() {
 		return false, fmt.Errorf("%s: a terminal is attached to the session but no window titled %q is visible to the window manager (screen locked?)", sp.Name, sp.Name)
 	}
 	if id == "" {
-		cwd, _ := sp.Cwd.resolve()
-		argv, err := attachCommand(sp.Name)
-		if err != nil {
-			return false, err
+		cwd, ok := sp.Cwd.resolve()
+		if !ok && len(sp.Cwd) > 0 {
+			return false, fmt.Errorf("space %q: none of cwd %v exists", sp.Name, sp.Cwd)
 		}
 		if err := d.spawn(sp.Name, cwd, argv); err != nil {
 			return false, err

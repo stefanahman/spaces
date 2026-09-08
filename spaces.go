@@ -33,7 +33,11 @@ func open(d desktop, sp Space, then bool, out io.Writer) error {
 			return err
 		}
 	}
-	spawned, err := ensureWindow(d, sp)
+	argv, err := attachCommand(sp.Name)
+	if err != nil {
+		return err
+	}
+	spawned, err := ensureWindow(d, sp, argv, func() bool { return hasClient(sp.Name) })
 	if err != nil {
 		return err
 	}
