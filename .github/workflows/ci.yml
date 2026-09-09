@@ -16,6 +16,13 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tmux
       - run: make lint
       - run: make test
+      # A broken .goreleaser.yaml would otherwise surface only after a
+      # public tag, with the release already failed.
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: check
 
   # Static analysis on the current Go; the job above proves the minimum
   # in go.mod still builds and passes.
