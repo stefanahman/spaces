@@ -48,6 +48,9 @@ var (
 // the space's `select` otherwise. What exists is kept: workspaces are
 // found by name, tabs and panes by position in the layout, and a
 // command is typed only into a pane that runs nothing but its shell.
+// A workspace this run creates joins its `group:` where the
+// multiplexer has them — cmux does, tmux and herdr do not, and there
+// the call is a no-op.
 func render(d mux.Driver, sp Space, selectWS string, out, errOut io.Writer) error {
 	if err := waitForPing(d, pingTimeout); err != nil {
 		return fmt.Errorf("%s: %s: %w", sp.Name, sp.Multiplexer, err)
@@ -75,6 +78,15 @@ func render(d mux.Driver, sp Space, selectWS string, out, errOut io.Writer) erro
 			}
 			byName[name] = ws
 			created++
+			// Only what this run created. Dragging a workspace out of
+			// a group in the sidebar is a decision, and the next open
+			// must not undo it — so an existing workspace is left
+			// where the user put it, group or none.
+			if w.Group != "" {
+				if err := mux.Group(d, w.Group, ws, mux.GroupStyle{Color: w.style.Color, Icon: w.style.Icon}); err != nil {
+					return fmt.Errorf("%s: workspace %s: group %s: %w", sp.Name, name, w.Group, err)
+				}
+			}
 		}
 		if err := renderWindows(d, sp.Name, ws, w, fresh, errOut); err != nil {
 			return err

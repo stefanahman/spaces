@@ -38,7 +38,7 @@ spaces:
 `
 
 func TestKeysOnWorkspaces(t *testing.T) {
-	spaces, err := mergeSpaces([]source{{"a.yaml", []byte(threeWays)}})
+	spaces, _, err := mergeSpaces([]source{{"a.yaml", []byte(threeWays)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,14 +89,14 @@ func TestKeysOnWorkspaces(t *testing.T) {
 		"bad workspace key":             "spaces:\n  h: {command: herdr, multiplexer: herdr, workspaces: {a: {key: xy, windows: [w]}}}\n",
 	}
 	for name, yaml := range rejects {
-		_, err := mergeSpaces([]source{{"a.yaml", []byte(yaml)}})
+		_, _, err := mergeSpaces([]source{{"a.yaml", []byte(yaml)}})
 		if err == nil {
 			t.Errorf("%s: expected an error", name)
 		} else if strings.Contains(name, "two") && !strings.Contains(err.Error(), "bound to both") {
 			t.Errorf("%s: %v, want the two holders named", name, err)
 		}
 	}
-	_, err = mergeSpaces([]source{{"a.yaml", []byte("spaces:\n  h: {command: herdr, multiplexer: herdr, workspaces: {a: {key: x, windows: [w]}, b: {key: x, windows: [w]}}}\n")}})
+	_, _, err = mergeSpaces([]source{{"a.yaml", []byte("spaces:\n  h: {command: herdr, multiplexer: herdr, workspaces: {a: {key: x, windows: [w]}, b: {key: x, windows: [w]}}}\n")}})
 	if err == nil || !strings.Contains(err.Error(), `key "x" is bound to both workspace "a" of "h" and workspace "b" of "h"`) {
 		t.Errorf("message: %v", err)
 	}

@@ -310,3 +310,83 @@ func TestListCountsTheWorkspaces(t *testing.T) {
 		}
 	}
 }
+
+// TestRenderGroupsFreshWorkspaces: a workspace this run creates joins
+// its group with the declared style; one that was already there is
+// left where the user put it, and a workspace with no group is never
+// grouped. Under herdr and tmux the same config groups nothing.
+func TestRenderGroupsFreshWorkspaces(t *testing.T) {
+	quick(t)
+	fake := muxtest.InstallFakeCmux(t)
+	fake.AddWorkspace("", "HOME")
+	// A workspace that exists before this run, ungrouped: the user
+	// dragged it out, and an open must not put it back.
+	fake.AddWorkspace("prs", "WS-PRS")
+	d := mux.Cmux{}
+	dir := t.TempDir()
+	sp := Space{Name: "cmux", App: "cmux", Multiplexer: "cmux", Workspaces: map[string]Workspace{
+		"eden":  {Cwd: pathList{dir}, Group: "Tooling", style: Group{Color: "#8fa1b3", Icon: "wrench.and.screwdriver"}},
+		"prs":   {Cwd: pathList{dir}, Group: "Tooling", style: Group{Color: "#8fa1b3", Icon: "wrench.and.screwdriver"}},
+		"bf-1":  {Cwd: pathList{dir}, Group: "Features"},
+		"loose": {Cwd: pathList{dir}},
+	}}
+	var out, errOut strings.Builder
+	if err := render(d, sp, "", &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	tooling, ok := fake.Group("Tooling")
+	if !ok {
+		t.Fatal("no Tooling group")
+	}
+	eden, _ := fake.Workspace("eden")
+	if !reflect.DeepEqual(tooling.MemberIDs, []string{eden.ID}) {
+		t.Errorf("Tooling holds %v, want only the fresh eden %q — prs was already there", tooling.MemberIDs, eden.ID)
+	}
+	if tooling.AnchorID != eden.ID {
+		t.Errorf("Tooling is anchored on %q, want %q", tooling.AnchorID, eden.ID)
+	}
+	if tooling.Color != "#8fa1b3" || tooling.Icon != "wrench.and.screwdriver" {
+		t.Errorf("Tooling style = %q %q", tooling.Color, tooling.Icon)
+	}
+	// A group with no declaration is made without a style.
+	features, ok := fake.Group("Features")
+	if !ok {
+		t.Fatal("no Features group")
+	}
+	if features.Color != "" || features.Icon != "" {
+		t.Errorf("Features style = %q %q, want none", features.Color, features.Icon)
+	}
+	if len(fake.Groups()) != 2 {
+		t.Errorf("groups = %+v, want Tooling and Features only — a workspace with no group joins none", fake.Groups())
+	}
+
+	// A second run creates nothing, so it groups nothing.
+	before := len(fake.Calls())
+	out.Reset()
+	if err := render(d, sp, "", &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	for _, call := range fake.Calls()[before:] {
+		if strings.HasPrefix(call, "workspace-group create") || strings.HasPrefix(call, "workspace-group add") {
+			t.Errorf("a second run wrote to the groups: %q", call)
+		}
+	}
+}
+
+// TestRenderGroupsAreCmuxOnly: the same config under herdr issues no
+// grouping call — herdr has none, and mux.Group is a no-op there.
+func TestRenderGroupsAreCmuxOnly(t *testing.T) {
+	quick(t)
+	fake := muxtest.NewFakeHerdr(t)
+	dir := t.TempDir()
+	sp := Space{Name: "herdr", Command: argv{"herdr"}, Multiplexer: "herdr", Workspaces: map[string]Workspace{
+		"eden": {Cwd: pathList{dir}, Group: "Tooling", style: Group{Color: "#8fa1b3"}},
+	}}
+	var out, errOut strings.Builder
+	if err := render(mux.NewHerdr(fake.Socket()), sp, "", &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "1 workspaces created") {
+		t.Errorf("out %q", out.String())
+	}
+}

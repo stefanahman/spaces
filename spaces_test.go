@@ -518,7 +518,7 @@ func TestCheck(t *testing.T) {
 		}},
 	}
 	var out strings.Builder
-	err := check(d, spaces, &out)
+	err := check(d, spaces, nil, &out)
 	for _, want := range []string{
 		"error: b: desktop space 9 does not exist (this desktop has 1..3)",
 		"error: c: none of cwd [" + missing + "] exists",
@@ -597,7 +597,7 @@ func TestCheckAuditsMultiplexers(t *testing.T) {
 		{Name: "c2", Command: argv{"sh"}, Multiplexer: "cmux", Workspaces: ws},
 	}
 	var out strings.Builder
-	err := check(d, spaces, &out)
+	err := check(d, spaces, nil, &out)
 	if want := []string{"tmux", "herdr work", "cmux"}; !reflect.DeepEqual(asked, want) {
 		t.Errorf("asked %v, want %v", asked, want)
 	}
@@ -614,5 +614,32 @@ func TestCheckAuditsMultiplexers(t *testing.T) {
 	}
 	if err == nil || err.Error() != "2 problem(s)" {
 		t.Errorf("check returned %v, want 2 problem(s)", err)
+	}
+}
+
+// TestCheckWarnsOnUnusedGroup: a group nobody joins is a warning, not
+// an error — the config is still valid, it just describes nothing.
+func TestCheckWarnsOnUnusedGroup(t *testing.T) {
+	d := &fakeDesktop{}
+	d.indexes = []int{1, 2, 3}
+	dir := t.TempDir()
+	spaces := []Space{{
+		Name: "c", Space: 1, App: "Ghostty", Multiplexer: "cmux",
+		Workspaces: map[string]Workspace{
+			"joined": {Cwd: pathList{dir}, Group: "Tooling"},
+			"loose":  {Cwd: pathList{dir}},
+		},
+	}}
+	groups := map[string]Group{
+		"Tooling": {Color: "#8fa1b3", file: "macos.yaml"},
+		"Ghosts":  {Icon: "hammer", file: "bardo.yaml"},
+	}
+	var out strings.Builder
+	_ = check(d, spaces, groups, &out)
+	if want := `warning: group "Ghosts" is declared in bardo.yaml and no workspace joins it`; !strings.Contains(out.String(), want) {
+		t.Errorf("check said %q, want %q", out.String(), want)
+	}
+	if strings.Contains(out.String(), `"Tooling"`) {
+		t.Errorf("a group a workspace joins is not warned about:\n%s", out.String())
 	}
 }

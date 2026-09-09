@@ -378,7 +378,7 @@ func yabaiRules(spaces []Space, out io.Writer) {
 // spaces, missing tools — and what would spoil the agents in it: a
 // running multiplexer started with the wrong environment. Exit status
 // 1 when anything is wrong; warnings alone pass.
-func check(d desktop, spaces []Space, out io.Writer) error {
+func check(d desktop, spaces []Space, groups map[string]Group, out io.Writer) error {
 	problems := 0
 	files, _ := configFiles()
 	fmt.Fprintf(out, "config: %d file(s), %d space(s)\n", len(files), len(spaces))
@@ -421,6 +421,26 @@ func check(d desktop, spaces []Space, out io.Writer) error {
 		if len(names) > 1 {
 			fmt.Fprintf(out, "warning: desktop space %d is claimed by %s\n", n, strings.Join(names, ", "))
 		}
+	}
+	// A group nobody joins describes nothing. Usually a renamed
+	// workspace, or a `group:` spelled differently from the heading.
+	used := map[string]bool{}
+	for _, sp := range spaces {
+		for _, name := range sp.workspaceNames() {
+			if g := sp.Workspaces[name].Group; g != "" {
+				used[g] = true
+			}
+		}
+	}
+	unused := make([]string, 0, len(groups))
+	for name := range groups {
+		if !used[name] {
+			unused = append(unused, name)
+		}
+	}
+	sort.Strings(unused)
+	for _, name := range unused {
+		fmt.Fprintf(out, "warning: group %q is declared in %s and no workspace joins it\n", name, groups[name].file)
 	}
 	toolsOK := true
 	for _, r := range d.requirements() {

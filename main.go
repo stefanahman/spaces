@@ -89,7 +89,7 @@ func main() {
 		return
 	}
 
-	spaces, err := loadSpaces()
+	spaces, groups, err := loadSpaces()
 	exitOn(err)
 	switch args[0] {
 	case "open", "focus":
@@ -126,7 +126,7 @@ func main() {
 	case "check":
 		d, err := newDesktop()
 		exitOn(err)
-		exitOn(check(d, spaces, os.Stdout))
+		exitOn(check(d, spaces, groups, os.Stdout))
 	default:
 		exitOn(usageError("unknown command " + args[0]))
 	}

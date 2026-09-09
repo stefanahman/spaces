@@ -10,7 +10,7 @@ import (
 
 func TestMergeSpaces(t *testing.T) {
 	t.Setenv("HOME", "/home/owl")
-	spaces, err := mergeSpaces([]source{
+	spaces, _, err := mergeSpaces([]source{
 		{"a.yaml", []byte(`
 spaces:
   bf-1:
@@ -102,7 +102,7 @@ spaces:
 
 func TestWorkspaces(t *testing.T) {
 	t.Setenv("HOME", "/home/owl")
-	spaces, err := mergeSpaces([]source{{"bardo.yaml", []byte(`
+	spaces, _, err := mergeSpaces([]source{{"bardo.yaml", []byte(`
 spaces:
   herdr:
     key: h
@@ -206,15 +206,15 @@ func TestMergeSpacesRejects(t *testing.T) {
 		"window with space":  {{"a.yaml", []byte("spaces:\n  x: {windows: ['a b']}\n")}},
 	}
 	for name, srcs := range cases {
-		if _, err := mergeSpaces(srcs); err == nil {
+		if _, _, err := mergeSpaces(srcs); err == nil {
 			t.Errorf("%s: expected an error", name)
 		}
 	}
-	if spaces, err := mergeSpaces([]source{{"a.yaml", []byte("spaces:\n  my_space-1: {windows: [w_1]}\n")}}); err != nil || len(spaces) != 1 || spaces[0].Name != "my_space-1" {
+	if spaces, _, err := mergeSpaces([]source{{"a.yaml", []byte("spaces:\n  my_space-1: {windows: [w_1]}\n")}}); err != nil || len(spaces) != 1 || spaces[0].Name != "my_space-1" {
 		t.Errorf("underscores and dashes are allowed: got %v, %v", spaces, err)
 	}
 	for _, empty := range []string{"", "# nothing\n", "spaces: {}\n"} {
-		if spaces, err := mergeSpaces([]source{{"a.yaml", []byte(empty)}}); err != nil || len(spaces) != 0 {
+		if spaces, _, err := mergeSpaces([]source{{"a.yaml", []byte(empty)}}); err != nil || len(spaces) != 0 {
 			t.Errorf("%q: got %v, %v", empty, spaces, err)
 		}
 	}
@@ -272,7 +272,7 @@ func TestConfigFiles(t *testing.T) {
 	if want := []string{"spaces.yaml", "spaces.d/a.yaml", "spaces.d/b.yaml"}; !reflect.DeepEqual(rel, want) {
 		t.Errorf("configFiles() = %v, want %v", rel, want)
 	}
-	if spaces, err := loadSpaces(); err != nil || len(spaces) != 0 {
+	if spaces, _, err := loadSpaces(); err != nil || len(spaces) != 0 {
 		t.Errorf("loadSpaces() = %v, %v", spaces, err)
 	}
 }
@@ -289,7 +289,7 @@ func TestConfigMovedFromTmuxSpaces(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(old, "a.yaml"), []byte("spaces:\n  app: {windows: [shell]}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := loadSpaces()
+	_, _, err := loadSpaces()
 	if err == nil || !strings.Contains(err.Error(), "config moved: "+filepath.Join(root, "tmux-spaces")+" → "+filepath.Join(root, "spaces")+"; move the files") {
 		t.Errorf("old config dir only: err = %v", err)
 	}
@@ -297,14 +297,14 @@ func TestConfigMovedFromTmuxSpaces(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "spaces", "spaces.d"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := loadSpaces(); err == nil || !strings.Contains(err.Error(), "config moved") {
+	if _, _, err := loadSpaces(); err == nil || !strings.Contains(err.Error(), "config moved") {
 		t.Errorf("empty new dir beside the old one: err = %v", err)
 	}
 	// Once a file lives in the new place, the old directory is history.
 	if err := os.WriteFile(filepath.Join(root, "spaces", "spaces.d", "a.yaml"), []byte("spaces:\n  app: {windows: [shell]}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if spaces, err := loadSpaces(); err != nil || len(spaces) != 1 {
+	if spaces, _, err := loadSpaces(); err != nil || len(spaces) != 1 {
 		t.Errorf("moved config: %v, %v", spaces, err)
 	}
 }
@@ -342,5 +342,106 @@ func TestClaudeChip(t *testing.T) {
 	}
 	if got := claudeChip(nil); got != "-" {
 		t.Errorf("empty chip = %q", got)
+	}
+}
+
+// TestGroupsMergeAndResolve: groups merge across files by name, each
+// workspace carries the style of the group it joins, a group declared
+// twice the same way is one declaration, and one declared differently
+// is an error — like a space's name or a key.
+func TestGroupsMergeAndResolve(t *testing.T) {
+	spaces, groups, err := mergeSpaces([]source{
+		{"macos.yaml", []byte(`
+groups:
+  Tooling: {color: "#8fa1b3", icon: wrench.and.screwdriver}
+spaces:
+  cmux:
+    app: cmux
+    multiplexer: cmux
+    workspaces:
+      eden: {key: e, group: Tooling, windows: [w]}
+      bf-1: {key: "1", group: Features, windows: [w]}
+      loose: {windows: [w]}
+`)},
+		{"bardo.yaml", []byte(`
+groups:
+  Tooling:  {color: "#8fa1b3", icon: wrench.and.screwdriver}
+  Features: {color: "#a3be8c"}
+spaces:
+  herdr:
+    command: herdr
+    multiplexer: herdr
+    workspaces:
+      eden: {key: e, group: Tooling, windows: [w]}
+`)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(groups) != 2 || groups["Tooling"].Color != "#8fa1b3" || groups["Tooling"].Icon != "wrench.and.screwdriver" {
+		t.Fatalf("groups = %+v", groups)
+	}
+	if groups["Features"].Icon != "" || groups["Features"].Color != "#a3be8c" {
+		t.Errorf("Features = %+v; a group may declare colour alone", groups["Features"])
+	}
+	if groups["Tooling"].file != "macos.yaml" {
+		t.Errorf("Tooling came from %q, want the first file that declared it", groups["Tooling"].file)
+	}
+	cmuxSpace, ok := find(spaces, "cmux")
+	if !ok {
+		t.Fatal("no cmux space")
+	}
+	// The style is resolved for every workspace that names a group,
+	// whichever file declared it.
+	if got := cmuxSpace.Workspaces["eden"]; got.Group != "Tooling" || got.style.Color != "#8fa1b3" || got.style.Icon != "wrench.and.screwdriver" {
+		t.Errorf("eden = %+v", got)
+	}
+	if got := cmuxSpace.Workspaces["bf-1"]; got.Group != "Features" || got.style.Color != "#a3be8c" {
+		t.Errorf("bf-1 = %+v; a group declared in another file still resolves", got)
+	}
+	if got := cmuxSpace.Workspaces["loose"]; got.Group != "" || got.style != (Group{}) {
+		t.Errorf("loose = %+v; no group means no style", got)
+	}
+	// A group named by a workspace and never declared is not an error:
+	// it is made with the multiplexer's own look.
+	spaces, groups, err = mergeSpaces([]source{{"a.yaml", []byte("spaces:\n  c: {app: cmux, multiplexer: cmux, workspaces: {w: {group: Undeclared, windows: [w]}}}\n")}})
+	if err != nil || len(groups) != 0 {
+		t.Fatalf("undeclared group: %v, groups %v", err, groups)
+	}
+	if got := spaces[0].Workspaces["w"]; got.Group != "Undeclared" || got.style != (Group{}) {
+		t.Errorf("undeclared = %+v", got)
+	}
+}
+
+// TestGroupsReject: the declarations a merge refuses.
+func TestGroupsReject(t *testing.T) {
+	cases := map[string][]source{
+		"declared differently": {
+			{"a.yaml", []byte("groups:\n  T: {color: \"#111111\"}\n")},
+			{"b.yaml", []byte("groups:\n  T: {color: \"#222222\"}\n")},
+		},
+		"icon differs": {
+			{"a.yaml", []byte("groups:\n  T: {icon: hammer}\n")},
+			{"b.yaml", []byte("groups:\n  T: {icon: wrench}\n")},
+		},
+		"bad colour":     {{"a.yaml", []byte("groups:\n  T: {color: red}\n")}},
+		"short colour":   {{"a.yaml", []byte("groups:\n  T: {color: \"#fff\"}\n")}},
+		"bad icon":       {{"a.yaml", []byte("groups:\n  T: {icon: \"wrench and screwdriver\"}\n")}},
+		"bad group name": {{"a.yaml", []byte("groups:\n  \"-T\": {color: \"#111111\"}\n")}},
+		"unknown key":    {{"a.yaml", []byte("groups:\n  T: {colour: \"#111111\"}\n")}},
+		"bad group on a workspace": {{"a.yaml", []byte(
+			"spaces:\n  c: {app: cmux, multiplexer: cmux, workspaces: {w: {group: \"a/b\", windows: [w]}}}\n")}},
+	}
+	for name, srcs := range cases {
+		if _, _, err := mergeSpaces(srcs); err == nil {
+			t.Errorf("%s: expected an error", name)
+		}
+	}
+	// The same declaration in two files is one declaration.
+	if _, groups, err := mergeSpaces([]source{
+		{"a.yaml", []byte("groups:\n  T: {color: \"#111111\", icon: hammer}\n")},
+		{"b.yaml", []byte("groups:\n  T: {color: \"#111111\", icon: hammer}\n")},
+	}); err != nil || len(groups) != 1 {
+		t.Errorf("the same declaration twice: %v, groups %v", err, groups)
 	}
 }

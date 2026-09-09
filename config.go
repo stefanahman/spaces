@@ -1,9 +1,11 @@
 // Configuration: every *.yaml in $XDG_CONFIG_HOME/spaces/spaces.d/
 // plus an optional spaces.yaml next to it, merged. Each file declares
-// spaces under a `spaces:` mapping; a name declared twice anywhere,
-// or a key bound twice within one multiplexer, is an error — never a
-// silent override — because the files typically come from different
-// sources (one per dotfiles branch).
+// spaces under a `spaces:` mapping and, optionally, sidebar groups
+// under `groups:`; a name declared twice anywhere, or a key bound
+// twice within one multiplexer, is an error — never a silent
+// override — because the files typically come from different sources
+// (one per dotfiles branch). A group two files declare the same way
+// is fine: it is one description, written twice.
 package main
 
 import (
@@ -52,7 +54,26 @@ type Workspace struct {
 	Key     string   `yaml:"key"` // one of 0-9 a-z: `spaces key <k>` opens the space on this workspace
 	Cwd     pathList `yaml:"cwd"`
 	Windows []Window `yaml:"windows"`
+	Group   string   `yaml:"group"` // the sidebar group it joins when this run creates it
+
+	style Group // the group's declaration, resolved at merge time
 }
+
+// Group is how a sidebar group looks. Only cmux has them; under tmux
+// and herdr a `group:` is inert, so one config serves all three.
+// Neither field is required: a group named by a workspace and never
+// declared here is made with the multiplexer's own default look.
+type Group struct {
+	Color string `yaml:"color"` // #RRGGBB
+	Icon  string `yaml:"icon"`  // an SF Symbol name, e.g. wrench.and.screwdriver
+
+	file string // where it was declared, for error messages
+}
+
+// same reports whether two declarations of one group agree. The file
+// they came from is not part of it: the same description in two
+// branches is one description.
+func (g Group) same(other Group) bool { return g.Color == other.Color && g.Icon == other.Icon }
 
 // hasWorkspaces reports whether the space builds workspaces inside a
 // multiplexer.
@@ -244,17 +265,18 @@ func configFiles() ([]string, error) {
 	return files, nil
 }
 
-// loadSpaces reads and merges every config file.
-func loadSpaces() ([]Space, error) {
+// loadSpaces reads and merges every config file: the spaces, and the
+// sidebar groups their workspaces may join.
+func loadSpaces() ([]Space, map[string]Group, error) {
 	files, err := configFiles()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var sources []source
 	for _, f := range files {
 		data, err := os.ReadFile(f)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		sources = append(sources, source{name: f, data: data})
 	}
@@ -270,9 +292,11 @@ type source struct {
 // declared twice, or a key bound twice within one multiplexer — a
 // space's own key lives in its realm, a workspace's in the space's
 // multiplexer, so bf-1 can be key 1 as a tmux space, a herdr
-// workspace and a cmux workspace at once. The result is sorted by name.
-func mergeSpaces(sources []source) ([]Space, error) {
+// workspace and a cmux workspace at once. Group declarations merge by
+// name and must agree. The result is sorted by name.
+func mergeSpaces(sources []source) ([]Space, map[string]Group, error) {
 	byName := map[string]Space{}
+	groups := map[string]Group{}
 	byKey := map[string]map[string]string{} // realm → key → holder
 	bind := func(realm, key string, holder keyHolder) error {
 		if byKey[realm] == nil {
@@ -287,11 +311,29 @@ func mergeSpaces(sources []source) ([]Space, error) {
 	for _, src := range sources {
 		var file struct {
 			Spaces map[string]Space `yaml:"spaces"`
+			Groups map[string]Group `yaml:"groups"`
 		}
 		dec := yaml.NewDecoder(bytes.NewReader(src.data))
 		dec.KnownFields(true)
 		if err := dec.Decode(&file); err != nil && !errors.Is(err, io.EOF) {
-			return nil, fmt.Errorf("%s: %w", src.name, err)
+			return nil, nil, fmt.Errorf("%s: %w", src.name, err)
+		}
+		groupNames := make([]string, 0, len(file.Groups))
+		for name := range file.Groups {
+			groupNames = append(groupNames, name)
+		}
+		sort.Strings(groupNames)
+		for _, name := range groupNames {
+			g := file.Groups[name]
+			g.file = src.name
+			if err := g.validate(name); err != nil {
+				return nil, nil, fmt.Errorf("%s: group %q: %w", src.name, name, err)
+			}
+			if prev, dup := groups[name]; dup && !prev.same(g) {
+				return nil, nil, fmt.Errorf("group %q is declared differently in %s and %s", name, prev.file, src.name)
+			} else if !dup {
+				groups[name] = g
+			}
 		}
 		// Deterministic error messages: visit names in order.
 		names := make([]string, 0, len(file.Spaces))
@@ -304,20 +346,20 @@ func mergeSpaces(sources []source) ([]Space, error) {
 			sp.Name = name
 			sp.file = src.name
 			if prev, dup := byName[name]; dup {
-				return nil, fmt.Errorf("space %q is declared in both %s and %s", name, prev.file, src.name)
+				return nil, nil, fmt.Errorf("space %q is declared in both %s and %s", name, prev.file, src.name)
 			}
 			if err := sp.validate(); err != nil {
-				return nil, fmt.Errorf("%s: space %q: %w", src.name, name, err)
+				return nil, nil, fmt.Errorf("%s: space %q: %w", src.name, name, err)
 			}
 			if sp.Key != "" {
 				if err := bind(sp.realm(), sp.Key, keyHolder{space: sp}); err != nil {
-					return nil, err
+					return nil, nil, err
 				}
 			}
 			for _, wsName := range sp.workspaceNames() {
 				if key := sp.Workspaces[wsName].Key; key != "" {
 					if err := bind(sp.Multiplexer, key, keyHolder{space: sp, workspace: wsName}); err != nil {
-						return nil, err
+						return nil, nil, err
 					}
 				}
 			}
@@ -329,7 +371,20 @@ func mergeSpaces(sources []source) ([]Space, error) {
 		out = append(out, sp)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	return out, nil
+	// The style is resolved once, here, rather than at every open: the
+	// groups of one file may be declared beside the spaces of another.
+	// A workspace naming a group nobody described keeps the zero
+	// value, which asks the multiplexer for nothing.
+	for _, sp := range out {
+		for name, w := range sp.Workspaces {
+			if w.Group == "" {
+				continue
+			}
+			w.style = groups[w.Group]
+			sp.Workspaces[name] = w
+		}
+	}
+	return out, groups, nil
 }
 
 // validKey is what a space or a workspace may be bound to: nothing,
@@ -352,6 +407,36 @@ var validApp = regexp.MustCompile(`^[A-Za-z0-9 ()._-]+$`)
 
 // validEnvName is what an environment variable may be called.
 var validEnvName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// validGroupName is what a sidebar group may be called. Looser than a
+// space's name — it is a label in a sidebar, not a session name or a
+// regex — but a space is all it is allowed beyond the usual, so a
+// stray newline or quote cannot reach the multiplexer's CLI.
+var validGroupName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 _-]*$`)
+
+// validColor is a group's colour: #RRGGBB. Checked strictly because
+// cmux takes anything and simply shows nothing for what it cannot
+// read, so a typo would otherwise be silent.
+var validColor = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
+
+// validIcon is the shape of an SF Symbol name (square.grid.3x3,
+// wrench.and.screwdriver). The set is Apple's and not ours to check;
+// an unknown name is stored and simply not drawn.
+var validIcon = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.]*$`)
+
+// validate checks one group's declaration.
+func (g Group) validate(name string) error {
+	if !validGroupName.MatchString(name) {
+		return fmt.Errorf("name %q: letters, digits, space, - and _ are allowed, and it must start with a letter or digit", name)
+	}
+	if g.Color != "" && !validColor.MatchString(g.Color) {
+		return fmt.Errorf("color %q must be #RRGGBB", g.Color)
+	}
+	if g.Icon != "" && !validIcon.MatchString(g.Icon) {
+		return fmt.Errorf("icon %q is not an SF Symbol name (letters, digits and dots)", g.Icon)
+	}
+	return nil
+}
 
 // validate checks one space's shape; paths are checked by `check`
 // and at open time, because they differ per machine.
@@ -414,6 +499,9 @@ func (sp Space) validate() error {
 		}
 		if !validKey(sp.Workspaces[name].Key) {
 			return fmt.Errorf("workspace %q: key %q must be one of 0-9 a-z", name, sp.Workspaces[name].Key)
+		}
+		if g := sp.Workspaces[name].Group; g != "" && !validGroupName.MatchString(g) {
+			return fmt.Errorf("workspace %q: group %q: letters, digits, space, - and _ are allowed, and it must start with a letter or digit", name, g)
 		}
 		if _, err := validateWindows(sp.Workspaces[name].Windows); err != nil {
 			return fmt.Errorf("workspace %q: %w", name, err)
