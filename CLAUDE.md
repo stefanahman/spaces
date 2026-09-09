@@ -64,8 +64,9 @@ Three consumers live outside this repo, and a renamed verb or key
 breaks them silently: Karabiner runs `spaces key <k>` for every leader
 chord, yabairc `eval`s `spaces yabai-rules` for the window pins, and the
 space definitions themselves are `.config/spaces/spaces.d/*.yaml` in
-Stefan's eden checkout. None is yours to edit from here: say so in the
-handoff.
+Stefan's eden checkout — which is where the `groups:` map and every
+`group:` are declared in practice, one file per branch. None is yours
+to edit from here: say so in the handoff.
 
 ## Ship at a milestone
 

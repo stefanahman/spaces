@@ -208,6 +208,39 @@ a key press costs a fraction of a second.
 `multiplexer` and `workspaces` come together, each an error without
 the other; `session` applies to herdr. `select` names a workspace.
 
+**Groups.** cmux keeps workspaces in collapsible sidebar groups. A
+workspace can name the one it joins, and a top-level `groups:` map
+gives that name a look:
+
+```yaml
+groups:                       # merged across files like spaces are
+  Tooling:  {color: "#8fa1b3", icon: wrench.and.screwdriver}
+  Features: {color: "#a3be8c"}
+
+spaces:
+  cmux:
+    app: cmux
+    multiplexer: cmux
+    workspaces:
+      eden: {key: e, group: Tooling, cwd: ~/src/eden, windows: [shell]}
+      prs:  {key: r, group: Tooling, cwd: ~/src/app, windows: [{name: prs, command: owl pr}]}
+      bf-1: {key: "1", group: Features, cwd: ~/src/app, windows: [shell]}
+```
+
+Both keys are optional. A `group:` naming nothing in `groups:` is made
+with cmux's own look; `color` is `#RRGGBB` and `icon` an SF Symbol
+name, and a group is created anchored on the first workspace that
+joins it. **Only a workspace this run creates is grouped**: dragging
+one out of a group in the sidebar is your decision, and the next open
+leaves it where you put it. herdr and tmux have no grouping — tmux's
+container is the session — so a `group:` is inert there and one config
+serves all three.
+
+Groups merge by name across files. The same declaration in two files
+is one declaration; two that disagree are an error, as a space's name
+or a key bound twice already is. `check` warns about a group no
+workspace joins.
+
 **Switching multiplexer.** A workspace inside a herdr or cmux space
 can carry a `key:` too, and one key may be bound once per multiplexer
 — bf-1 as a tmux space on key 1, as a herdr workspace on key 1, as a
@@ -261,7 +294,7 @@ never came — is shown as a desktop notification as well.
 | `use [tmux\|herdr\|cmux]` | pick, or set, the active multiplexer; without an argument, off a terminal, just list them with the active one marked |
 | `list` | the active multiplexer, then name, key (a space's own, and its workspaces' in brackets), space, session state (for a command or app space: whether its window is open, and how many of its workspaces exist), and the [tmux-claude-status](https://github.com/stefanahman/tmux-claude-status) chip of its windows (`1⚠ 2~ 1* 3`: blocked, working, done, idle) |
 | `yabai-rules` | one `yabai -m rule` per pinned space — `eval` it in your yabairc so the space number has one home |
-| `check` | missing directories (workspaces' too), commands, applications and tools, desktop spaces that don't exist or are claimed twice, and a running multiplexer that was started with the wrong environment (see *Clean launches*) |
+| `check` | missing directories (workspaces' too), commands, applications and tools, desktop spaces that don't exist or are claimed twice, a group no workspace joins, and a running multiplexer that was started with the wrong environment (see *Clean launches*) |
 | `config path` | the directory it reads |
 
 Exit status: 64 for a bad invocation, 1 for a failure.
