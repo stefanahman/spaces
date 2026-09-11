@@ -301,11 +301,23 @@ func list(d desktop, spaces []Space, out io.Writer) error {
 			}
 		}
 		if sp.hasWorkspaces() {
-			have := "?"
-			if n, ok := workspaceCount(newDriver(sp.Multiplexer, sp.Session), sp); ok {
-				have = strconv.Itoa(n)
+			// on_demand workspaces are counted apart: absent is their
+			// resting state, and folding them in would read as five
+			// workspaces missing for as long as nobody wanted them.
+			always, onDemand := sp.wanted()
+			have, upOnDemand, ok := workspaceCount(newDriver(sp.Multiplexer, sp.Session), sp)
+			count := "?"
+			if ok {
+				count = strconv.Itoa(have)
 			}
-			session += fmt.Sprintf(", %s/%d workspaces", have, len(sp.Workspaces))
+			session += fmt.Sprintf(", %s/%d workspaces", count, always)
+			if onDemand > 0 {
+				count = "?"
+				if ok {
+					count = strconv.Itoa(upOnDemand)
+				}
+				session += fmt.Sprintf(", %s/%d on demand", count, onDemand)
+			}
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", sp.Name, key, space, session, claudeChip(claude[sp.Name]))
 	}

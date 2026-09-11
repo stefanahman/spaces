@@ -378,6 +378,9 @@ func TestListCountsTheWorkspaces(t *testing.T) {
 	}
 	t.Cleanup(func() { newDriver = orig })
 	workspaces, _ := workContext(t, "herdr")
+	// An on_demand workspace is counted apart: not being there is its
+	// resting state, not a workspace missing.
+	workspaces["lazygit"] = Workspace{OnDemand: true, Windows: []Window{{Name: "lazygit", Command: "lazygit"}}}
 	drv := mux.NewHerdr(fake.Socket())
 	if _, err := drv.Create("bf-1", ""); err != nil {
 		t.Fatal(err)
@@ -395,7 +398,10 @@ func TestListCountsTheWorkspaces(t *testing.T) {
 	if err := list(d, spaces, &out); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"cmux  c    8      window open, 1/3 workspaces  -", "gone  g    9      -, ?/3 workspaces            -"} {
+	for _, want := range []string{
+		"cmux  c    8      window open, 1/3 workspaces, 0/1 on demand  -",
+		"gone  g    9      -, ?/3 workspaces, ?/1 on demand            -",
+	} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("list lacks %q:\n%s", want, out.String())
 		}

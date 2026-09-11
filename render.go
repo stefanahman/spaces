@@ -330,18 +330,36 @@ func checkMultiplexers(out io.Writer, spaces []Space) int {
 
 // workspaceCount is how many of the space's workspaces exist, for
 // `list`; ok is false when the multiplexer can't be asked.
-func workspaceCount(d mux.Driver, sp Space) (have int, ok bool) {
+func workspaceCount(d mux.Driver, sp Space) (have, onDemand int, ok bool) {
 	if d == nil || d.Ping() != nil {
-		return 0, false
+		return 0, 0, false
 	}
 	existing, err := d.Workspaces()
 	if err != nil {
-		return 0, false
+		return 0, 0, false
 	}
 	for _, ws := range existing {
-		if _, declared := sp.Workspaces[ws.Name]; declared {
+		w, declared := sp.Workspaces[ws.Name]
+		switch {
+		case !declared:
+		case w.OnDemand:
+			onDemand++
+		default:
 			have++
 		}
 	}
-	return have, true
+	return have, onDemand, true
+}
+
+// wanted is how many of the space's workspaces are meant to be there
+// whenever it is open, and how many wait for a key.
+func (sp Space) wanted() (always, onDemand int) {
+	for _, w := range sp.Workspaces {
+		if w.OnDemand {
+			onDemand++
+		} else {
+			always++
+		}
+	}
+	return always, onDemand
 }
