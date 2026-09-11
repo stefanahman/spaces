@@ -4,6 +4,8 @@ github.com/stefanahman/mux v0.6.1 h1:/Chf5GL2u7jXqHKMlNIz8bAuuOb60FC3kO1vII5jpOM
 github.com/stefanahman/mux v0.6.1/go.mod h1:mFmRJqJuAuwKsMGu+YaRTsRsxJkAggolGQ7B2IOWKkM=
 github.com/stefanahman/mux v0.8.0 h1:zLkzdXbpssK2a46tng/MoGN9J3dWVTbIG/iSOL+ViYs=
 github.com/stefanahman/mux v0.8.0/go.mod h1:mFmRJqJuAuwKsMGu+YaRTsRsxJkAggolGQ7B2IOWKkM=
+github.com/stefanahman/mux v0.9.0 h1:yG5lvdvRgdDE5Ob09EbZUd4DBb0kE1aO3L2vv2jWxPY=
+github.com/stefanahman/mux v0.9.0/go.mod h1:mFmRJqJuAuwKsMGu+YaRTsRsxJkAggolGQ7B2IOWKkM=
 go.yaml.in/yaml/v3 v3.0.5 h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=
 go.yaml.in/yaml/v3 v3.0.5/go.mod h1:HVTZu1O7/Vkt2N+BFy8Zza+lnLsABggaTM2ZpNIGuKg=
 golang.org/x/sys v0.48.0 h1:bbX/i/6MgT9BVLM9RT1thmxL04yeTAhbEz4SyadbXoo=
