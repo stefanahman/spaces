@@ -559,7 +559,7 @@ func (p pingDriver) Ping() error { return p.err }
 func stubDrivers(t *testing.T, ping func(kind, session string) error) {
 	t.Helper()
 	real := newDriver
-	newDriver = func(kind, session string) mux.Driver { return pingDriver{err: ping(kind, session)} }
+	newDriver = func(kind, session, _ string) mux.Driver { return pingDriver{err: ping(kind, session)} }
 	t.Cleanup(func() { newDriver = real })
 }
 

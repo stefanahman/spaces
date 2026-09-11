@@ -295,6 +295,39 @@ func TestRenderKeepsAnOnDemandWorkspaceThatIsStillThere(t *testing.T) {
 	}
 }
 
+// TestSocketAimsTheDriver: a space that names a socket drives the app
+// on it. Two cmux builds can run at once — a nightly binds its own
+// socket — and the CLI's own default reaches whichever owns the usual
+// path, which is how a space comes to render its workspaces into one
+// app while the window manager focuses the other.
+func TestSocketAimsTheDriver(t *testing.T) {
+	for _, tc := range []struct {
+		kind, session, socket string
+		want                  string
+	}{
+		{kind: "cmux", want: ""},
+		{kind: "cmux", socket: "/tmp/cmux-nightly.sock", want: "/tmp/cmux-nightly.sock"},
+		{kind: "herdr", socket: "/tmp/herdr-test.sock", want: "/tmp/herdr-test.sock"},
+	} {
+		switch d := newDriver(tc.kind, tc.session, tc.socket).(type) {
+		case mux.Cmux:
+			if d.Socket != tc.want {
+				t.Errorf("%s socket %q: driver has %q, want %q", tc.kind, tc.socket, d.Socket, tc.want)
+			}
+		case mux.Herdr:
+			if d.Socket != tc.want {
+				t.Errorf("%s socket %q: driver has %q, want %q", tc.kind, tc.socket, d.Socket, tc.want)
+			}
+		default:
+			t.Errorf("%s: unexpected driver %T", tc.kind, d)
+		}
+	}
+	// A herdr session still names its own socket when none is given.
+	if d, ok := newDriver("herdr", "work", "").(mux.Herdr); !ok || !strings.HasSuffix(d.Socket, "sessions/work/herdr.sock") {
+		t.Errorf("herdr session work: socket %q", d.Socket)
+	}
+}
+
 func TestRenderWaitsForTheMultiplexer(t *testing.T) {
 	quick(t)
 	pingTimeout = 300 * time.Millisecond
@@ -336,7 +369,7 @@ func TestOpenBuildsTheWorkspaces(t *testing.T) {
 		t.Setenv(v, "")
 	}
 	orig := newDriver
-	newDriver = func(string, string) mux.Driver { return mux.NewHerdr(fake.Socket()) }
+	newDriver = func(string, string, string) mux.Driver { return mux.NewHerdr(fake.Socket()) }
 	t.Cleanup(func() { newDriver = orig })
 	workspaces, _ := workContext(t, "herdr")
 
@@ -370,7 +403,7 @@ func TestListCountsTheWorkspaces(t *testing.T) {
 		t.Setenv(v, "")
 	}
 	orig := newDriver
-	newDriver = func(_, session string) mux.Driver {
+	newDriver = func(_, session, _ string) mux.Driver {
 		if session == "gone" {
 			return mux.NewHerdr("/nonexistent/herdr.sock")
 		}

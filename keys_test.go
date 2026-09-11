@@ -111,7 +111,7 @@ func TestKeyOpensTheWorkspaceOfTheActiveMultiplexer(t *testing.T) {
 		t.Setenv(v, "")
 	}
 	orig := newDriver
-	newDriver = func(string, string) mux.Driver { return mux.NewHerdr(fake.Socket()) }
+	newDriver = func(string, string, string) mux.Driver { return mux.NewHerdr(fake.Socket()) }
 	t.Cleanup(func() { newDriver = orig })
 	shell := []Window{{Name: "shell"}}
 	spaces := []Space{
@@ -181,7 +181,7 @@ func TestKeyNotifiesEveryFailure(t *testing.T) {
 		t.Setenv(v, "")
 	}
 	orig := newDriver
-	newDriver = func(string, string) mux.Driver { return mux.NewHerdr("/nonexistent/herdr.sock") }
+	newDriver = func(string, string, string) mux.Driver { return mux.NewHerdr("/nonexistent/herdr.sock") }
 	t.Cleanup(func() { newDriver = orig })
 	spaces := []Space{{Name: "herdr", Key: "h", Space: 7, Command: argv{"sleep", "30"}, Multiplexer: "herdr", Select: "bf-1", Workspaces: map[string]Workspace{
 		"bf-1": {Key: "1", Windows: []Window{{Name: "shell"}}},
@@ -222,7 +222,7 @@ func TestListShowsTheMultiplexerAndWorkspaceKeys(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	quick(t)
 	orig := newDriver
-	newDriver = func(string, string) mux.Driver { return mux.NewHerdr("/nonexistent/herdr.sock") }
+	newDriver = func(string, string, string) mux.Driver { return mux.NewHerdr("/nonexistent/herdr.sock") }
 	t.Cleanup(func() { newDriver = orig })
 	if err := setActiveMultiplexer("herdr"); err != nil {
 		t.Fatal(err)

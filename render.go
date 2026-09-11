@@ -20,19 +20,20 @@ import (
 // newDriver is the multiplexer of that kind — the one a space builds
 // its workspaces in, or one `check` audits; session is herdr's. A
 // variable, so tests can put a fake in its place.
-var newDriver = func(kind, session string) mux.Driver {
+var newDriver = func(kind, session, socket string) mux.Driver {
 	switch kind {
 	case "tmux":
 		return mux.Tmux{}
 	case "herdr":
-		socket := ""
-		if session != "" {
+		if session != "" && socket == "" {
 			home, _ := os.UserHomeDir()
 			socket = filepath.Join(home, ".config", "herdr", "sessions", session, "herdr.sock")
 		}
 		return mux.NewHerdr(socket)
 	case "cmux":
-		return mux.NewCmux()
+		// "" leaves the CLI its own default, which is the app that
+		// owns ~/.local/state/cmux/cmux.sock.
+		return mux.NewCmuxAt(socket)
 	}
 	return nil
 }
@@ -303,14 +304,14 @@ func programOf(command string) string {
 // Ping). Prints each as an error and returns how many. A multiplexer
 // that isn't running, or won't answer, is not a problem here.
 func checkMultiplexers(out io.Writer, spaces []Space) int {
-	drivers := []mux.Driver{newDriver("tmux", "")}
+	drivers := []mux.Driver{newDriver("tmux", "", "")}
 	seen := map[string]bool{}
 	for _, sp := range spaces {
 		if sp.Multiplexer == "" || seen[sp.Multiplexer+"\x00"+sp.Session] {
 			continue
 		}
 		seen[sp.Multiplexer+"\x00"+sp.Session] = true
-		drivers = append(drivers, newDriver(sp.Multiplexer, sp.Session))
+		drivers = append(drivers, newDriver(sp.Multiplexer, sp.Session, sp.Socket))
 	}
 	problems := 0
 	for _, d := range drivers {

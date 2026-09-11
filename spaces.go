@@ -115,7 +115,7 @@ func renderWorkspaces(sp Space, selectWS string, out io.Writer) error {
 	if !sp.hasWorkspaces() {
 		return nil
 	}
-	return render(newDriver(sp.Multiplexer, sp.Session), sp, selectWS, out, os.Stderr)
+	return render(newDriver(sp.Multiplexer, sp.Session, sp.Socket), sp, selectWS, out, os.Stderr)
 }
 
 // selected names the workspace a key press lands on, for the status
@@ -305,7 +305,7 @@ func list(d desktop, spaces []Space, out io.Writer) error {
 			// resting state, and folding them in would read as five
 			// workspaces missing for as long as nobody wanted them.
 			always, onDemand := sp.wanted()
-			have, upOnDemand, ok := workspaceCount(newDriver(sp.Multiplexer, sp.Session), sp)
+			have, upOnDemand, ok := workspaceCount(newDriver(sp.Multiplexer, sp.Session, sp.Socket), sp)
 			count := "?"
 			if ok {
 				count = strconv.Itoa(have)

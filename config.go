@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -40,6 +41,7 @@ type Space struct {
 	Env         map[string]string    `yaml:"env"`         // environment the application is launched with (app spaces only)
 	Multiplexer string               `yaml:"multiplexer"` // herdr or cmux: what renders the workspaces
 	Session     string               `yaml:"session"`     // herdr: the session whose socket to use; default: herdr's default socket
+	Socket      string               `yaml:"socket"`      // the multiplexer's socket, where the default is not the one wanted
 	Workspaces  map[string]Workspace `yaml:"workspaces"`  // the work context built inside the multiplexer, by name
 	Select      string               `yaml:"select"`      // window selected when the session is created (default: the first), or the workspace shown when the space opens
 	Then        string               `yaml:"then"`        // run after `open` has focused the space
@@ -478,12 +480,16 @@ func (sp Space) validate() error {
 		return errors.New("workspaces are built inside a herdr or cmux space (command or app); a tmux space has windows")
 	case sp.hasWorkspaces() && sp.Multiplexer == "":
 		return errors.New("multiplexer is required with workspaces: herdr or cmux")
-	case sp.Multiplexer != "" && sp.Multiplexer != "herdr" && sp.Multiplexer != "cmux":
-		return fmt.Errorf("multiplexer must be herdr or cmux, got %q", sp.Multiplexer)
+	case sp.Multiplexer != "" && !slices.Contains(workspaceMultiplexers, sp.Multiplexer):
+		return fmt.Errorf("multiplexer must be %s, got %q", strings.Join(workspaceMultiplexers, ", "), sp.Multiplexer)
 	case sp.Multiplexer != "" && !sp.hasWorkspaces():
 		return errors.New("multiplexer applies to workspaces; declare some")
 	case sp.Session != "" && sp.Multiplexer != "herdr":
 		return errors.New("session applies to a herdr multiplexer")
+	case sp.Socket != "" && sp.Multiplexer == "":
+		return errors.New("socket applies to a multiplexer; declare one")
+	case sp.Socket != "" && sp.Multiplexer == "tmux":
+		return errors.New("socket applies to herdr and cmux; tmux is reached by its own command")
 	}
 	for name := range sp.Env {
 		if !validEnvName.MatchString(name) {
@@ -533,6 +539,11 @@ func (sp Space) validate() error {
 	}
 	return nil
 }
+
+// workspaceMultiplexers are the multiplexers workspaces can live in:
+// every one spaces knows except tmux, whose container is the session
+// its windows already sit in.
+var workspaceMultiplexers = []string{"herdr", "cmux"}
 
 // validateWindows checks a list of windows: named, uniquely, with a
 // sensible split and the command where it belongs. Returns the names.

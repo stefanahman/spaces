@@ -241,6 +241,27 @@ is one declaration; two that disagree are an error, as a space's name
 or a key bound twice already is. `check` warns about a group no
 workspace joins.
 
+**Which app, when several could answer.** `socket:` names the
+multiplexer's socket, for the case where the default is not the one
+wanted — a nightly cmux beside a stable one binds its own and holds
+its own workspaces, while the CLI's default reaches whichever owns
+`~/.local/state/cmux/cmux.sock`. Without it a space can focus one app
+and build its workspaces in the other:
+
+```yaml
+  cmux:
+    key: c
+    space: 2
+    app: cmux NIGHTLY
+    socket: /tmp/cmux-nightly.sock
+    multiplexer: cmux
+```
+
+A process started *inside* a cmux terminal needs none of this: the app
+puts its own socket in the environment, and the CLI follows it. This is
+for what spaces does from outside — a hotkey. herdr takes the same key,
+where `session:` does not name the socket wanted.
+
 **Workspaces that come and go.** A workspace whose program you open,
 use and quit — lazygit, a picker — does not have to sit there idling
 in between. `on_demand: true` ties its life to that program's:

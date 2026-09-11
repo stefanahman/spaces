@@ -19,6 +19,7 @@ import (
 )
 
 // multiplexers, in the order `use` lists them.
+// multiplexers, in the order `use` lists them.
 var multiplexers = []string{"tmux", "herdr", "cmux"}
 
 // stateFile is $XDG_STATE_HOME/spaces/multiplexer, else
@@ -50,7 +51,7 @@ func activeMultiplexer() (string, error) {
 	}
 	kind := strings.TrimSpace(string(data))
 	if !slices.Contains(multiplexers, kind) {
-		return "", fmt.Errorf("%s: %q is not a multiplexer (tmux, herdr, cmux)", path, kind)
+		return "", fmt.Errorf("%s: %q is not a multiplexer (%s)", path, kind, strings.Join(multiplexers, ", "))
 	}
 	return kind, nil
 }
