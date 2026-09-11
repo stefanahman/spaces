@@ -643,3 +643,31 @@ func TestCheckWarnsOnUnusedGroup(t *testing.T) {
 		t.Errorf("a group a workspace joins is not warned about:\n%s", out.String())
 	}
 }
+
+// TestCheckWarnsWhenASpaceSelectsAnOnDemandWorkspace: landing on a
+// workspace makes it, so selecting an on_demand one brings it back at
+// every open — valid, and almost certainly not what was meant.
+func TestCheckWarnsWhenASpaceSelectsAnOnDemandWorkspace(t *testing.T) {
+	d := &fakeDesktop{}
+	d.indexes = []int{1, 2, 3}
+	dir := t.TempDir()
+	spaces := []Space{{
+		Name: "c", Space: 1, App: "Ghostty", Multiplexer: "cmux", Select: "lazygit",
+		Workspaces: map[string]Workspace{
+			"lazygit": {Cwd: pathList{dir}, OnDemand: true, Windows: []Window{{Name: "lazygit", Command: "lazygit"}}},
+			"prs":     {Cwd: pathList{dir}, Windows: []Window{{Name: "prs", Command: "owl pr"}}},
+		},
+	}}
+	var out strings.Builder
+	_ = check(d, spaces, nil, &out)
+	if want := `warning: c selects "lazygit", which is on_demand: it will be created on every open`; !strings.Contains(out.String(), want) {
+		t.Errorf("check said %q, want %q", out.String(), want)
+	}
+
+	spaces[0].Select = "prs"
+	out.Reset()
+	_ = check(d, spaces, nil, &out)
+	if strings.Contains(out.String(), "on_demand") {
+		t.Errorf("selecting an ordinary workspace is not warned about:\n%s", out.String())
+	}
+}

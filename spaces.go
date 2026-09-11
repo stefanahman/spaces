@@ -442,6 +442,14 @@ func check(d desktop, spaces []Space, groups map[string]Group, out io.Writer) er
 	for _, name := range unused {
 		fmt.Fprintf(out, "warning: group %q is declared in %s and no workspace joins it\n", name, groups[name].file)
 	}
+	// A space lands on its select every time it opens, and landing on
+	// a workspace makes it: an on_demand select is a workspace that is
+	// born at every open, which is what on_demand was asked not to do.
+	for _, sp := range spaces {
+		if sp.Select != "" && sp.Workspaces[sp.Select].OnDemand {
+			fmt.Fprintf(out, "warning: %s selects %q, which is on_demand: it will be created on every open\n", sp.Name, sp.Select)
+		}
+	}
 	toolsOK := true
 	for _, r := range d.requirements() {
 		if !r.ok() {

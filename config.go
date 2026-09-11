@@ -51,10 +51,11 @@ type Space struct {
 // directory and its windows — tabs there — with the panes of each.
 // The first window is the pane the workspace is created with.
 type Workspace struct {
-	Key     string   `yaml:"key"` // one of 0-9 a-z: `spaces key <k>` opens the space on this workspace
-	Cwd     pathList `yaml:"cwd"`
-	Windows []Window `yaml:"windows"`
-	Group   string   `yaml:"group"` // the sidebar group it joins when this run creates it
+	Key      string   `yaml:"key"` // one of 0-9 a-z: `spaces key <k>` opens the space on this workspace
+	Cwd      pathList `yaml:"cwd"`
+	Windows  []Window `yaml:"windows"`
+	Group    string   `yaml:"group"`     // the sidebar group it joins when this run creates it
+	OnDemand bool     `yaml:"on_demand"` // born on its own key, gone when its command ends
 
 	style Group // the group's declaration, resolved at merge time
 }
@@ -505,6 +506,20 @@ func (sp Space) validate() error {
 		}
 		if _, err := validateWindows(sp.Workspaces[name].Windows); err != nil {
 			return fmt.Errorf("workspace %q: %w", name, err)
+		}
+		// on_demand ties a workspace's life to one program's: it is
+		// born on its key and gone when that program ends. Several
+		// windows, or a window without a command, leave no single
+		// program whose end means anything.
+		if w := sp.Workspaces[name]; w.OnDemand {
+			switch {
+			case len(w.Windows) != 1:
+				return fmt.Errorf("workspace %q: on_demand needs exactly one window, the program whose end closes it; got %d", name, len(w.Windows))
+			case w.Windows[0].Command == "":
+				return fmt.Errorf("workspace %q: on_demand needs the window to run a command", name)
+			case len(w.Windows[0].Panes) > 0:
+				return fmt.Errorf("workspace %q: on_demand needs one pane, so that one program's end is the workspace's", name)
+			}
 		}
 	}
 	switch {

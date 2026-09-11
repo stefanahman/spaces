@@ -191,11 +191,16 @@ func TestMergeSpacesRejects(t *testing.T) {
 		"unknown multiplexer":            {{"a.yaml", []byte("spaces:\n  x: {app: cmux, multiplexer: screen, workspaces: {a: {}}}\n")}},
 		"session on cmux":                {{"a.yaml", []byte("spaces:\n  x: {app: cmux, multiplexer: cmux, session: work, workspaces: {a: {}}}\n")}},
 		"select of no workspace":         {{"a.yaml", []byte("spaces:\n  x: {app: cmux, multiplexer: cmux, workspaces: {a: {}}, select: b}\n")}},
-		"workspace name with space":      {{"a.yaml", []byte("spaces:\n  x: {app: cmux, multiplexer: cmux, workspaces: {'a b': {}}}\n")}},
-		"workspace window twice":         {{"a.yaml", []byte("spaces:\n  x: {app: cmux, multiplexer: cmux, workspaces: {a: {windows: [w, w]}}}\n")}},
-		"workspace pane and command":     {{"a.yaml", []byte("spaces:\n  x: {app: cmux, multiplexer: cmux, workspaces: {a: {windows: [{name: w, command: c, panes: [{}, {}]}]}}}\n")}},
-		"name with colon":                {{"a.yaml", []byte("spaces:\n  a:b: {windows: [shell]}\n")}},
-		"negative space":                 {{"a.yaml", []byte("spaces:\n  x: {space: -1, windows: [shell]}\n")}},
+		// on_demand ends a workspace with one program; the shapes
+		// where no single program's end could mean that are refused.
+		"on_demand with two windows":  {{"a.yaml", []byte("spaces:\n  x: {app: cmux, multiplexer: cmux, workspaces: {a: {key: a, on_demand: true, windows: [{name: w, command: lazygit}, {name: v, command: nvim}]}}}\n")}},
+		"on_demand without a command": {{"a.yaml", []byte("spaces:\n  x: {app: cmux, multiplexer: cmux, workspaces: {a: {key: a, on_demand: true, windows: [shell]}}}\n")}},
+		"on_demand with panes":        {{"a.yaml", []byte("spaces:\n  x: {app: cmux, multiplexer: cmux, workspaces: {a: {key: a, on_demand: true, windows: [{name: w, command: lazygit, panes: [{}, {}]}]}}}\n")}},
+		"workspace name with space":   {{"a.yaml", []byte("spaces:\n  x: {app: cmux, multiplexer: cmux, workspaces: {'a b': {}}}\n")}},
+		"workspace window twice":      {{"a.yaml", []byte("spaces:\n  x: {app: cmux, multiplexer: cmux, workspaces: {a: {windows: [w, w]}}}\n")}},
+		"workspace pane and command":  {{"a.yaml", []byte("spaces:\n  x: {app: cmux, multiplexer: cmux, workspaces: {a: {windows: [{name: w, command: c, panes: [{}, {}]}]}}}\n")}},
+		"name with colon":             {{"a.yaml", []byte("spaces:\n  a:b: {windows: [shell]}\n")}},
+		"negative space":              {{"a.yaml", []byte("spaces:\n  x: {space: -1, windows: [shell]}\n")}},
 		// Names end up in a yabai regex that yabairc evals, in tmux
 		// targets and in a window title: letters, digits, - and _ only.
 		"name with quote":    {{"a.yaml", []byte("spaces:\n  'a\"b': {windows: [shell]}\n")}},

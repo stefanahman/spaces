@@ -241,6 +241,28 @@ is one declaration; two that disagree are an error, as a space's name
 or a key bound twice already is. `check` warns about a group no
 workspace joins.
 
+**Workspaces that come and go.** A workspace whose program you open,
+use and quit — lazygit, a picker — does not have to sit there idling
+in between. `on_demand: true` ties its life to that program's:
+
+```yaml
+      lazygit: {key: g, on_demand: true, cwd: ~/src/app, windows: [{name: lazygit, command: lazygit}]}
+```
+
+It is made when a run lands on it — its own key, or the space's
+`select:` — and skipped by every other open, so reaching for a
+different key no longer rebuilds it. Its command is typed with the line
+that ends the workspace appended, so quitting the program takes the
+workspace with it: `exit` under tmux and herdr, which drop a workspace
+whose shell has gone, and `cmux workspace close` under cmux, which
+keeps the shell alive after the command by design.
+
+Because one program's end is the whole contract, `on_demand` wants
+exactly one window, running a command, with no extra panes; anything
+else is a config error. A space that *selects* an on_demand workspace
+makes it on every open, which is what `on_demand` was asked not to do —
+`check` warns about that combination.
+
 **Switching multiplexer.** A workspace inside a herdr or cmux space
 can carry a `key:` too, and one key may be bound once per multiplexer
 — bf-1 as a tmux space on key 1, as a herdr workspace on key 1, as a
@@ -294,7 +316,7 @@ never came — is shown as a desktop notification as well.
 | `use [tmux\|herdr\|cmux]` | pick, or set, the active multiplexer; without an argument, off a terminal, just list them with the active one marked |
 | `list` | the active multiplexer, then name, key (a space's own, and its workspaces' in brackets), space, session state (for a command or app space: whether its window is open, and how many of its workspaces exist), and the [tmux-claude-status](https://github.com/stefanahman/tmux-claude-status) chip of its windows (`1⚠ 2~ 1* 3`: blocked, working, done, idle) |
 | `yabai-rules` | one `yabai -m rule` per pinned space — `eval` it in your yabairc so the space number has one home |
-| `check` | missing directories (workspaces' too), commands, applications and tools, desktop spaces that don't exist or are claimed twice, a group no workspace joins, and a running multiplexer that was started with the wrong environment (see *Clean launches*) |
+| `check` | missing directories (workspaces' too), commands, applications and tools, desktop spaces that don't exist or are claimed twice, a group no workspace joins, an `on_demand` workspace a space selects, and a running multiplexer that was started with the wrong environment (see *Clean launches*) |
 | `config path` | the directory it reads |
 
 Exit status: 64 for a bad invocation, 1 for a failure.

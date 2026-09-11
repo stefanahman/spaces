@@ -63,11 +63,26 @@ func render(d mux.Driver, sp Space, selectWS string, out, errOut io.Writer) erro
 	for _, ws := range existing {
 		byName[ws.Name] = ws
 	}
-	created := 0
+	// Resolved before the loop, because it decides what gets made:
+	// the workspace a run lands on is always there to land on, even
+	// when it is on_demand.
+	if selectWS == "" {
+		selectWS = sp.Select
+	}
+	created, want := 0, 0
 	for _, name := range sp.workspaceNames() {
 		w := sp.Workspaces[name]
 		ws, ok := byName[name]
 		fresh := !ok
+		// An on_demand workspace is made by its own key and by nothing
+		// else: opening the space, or reaching for a different key,
+		// leaves it unborn. Without this a workspace that closed itself
+		// would come back at the next key press of any kind, which is
+		// the whole point of it having gone.
+		if !ok && w.OnDemand && name != selectWS {
+			continue
+		}
+		want++
 		if !ok {
 			cwd, err := w.createCwd(sp.Name, name)
 			if err != nil {
@@ -92,21 +107,21 @@ func render(d mux.Driver, sp Space, selectWS string, out, errOut io.Writer) erro
 			return err
 		}
 	}
-	if selectWS == "" {
-		selectWS = sp.Select
-	}
 	if selectWS != "" {
 		if err := d.Select(byName[selectWS]); err != nil {
 			return fmt.Errorf("%s: select %s: %w", sp.Name, selectWS, err)
 		}
 	}
+	// The counts are of what this run was asked for, not of what the
+	// config declares: the on_demand workspaces nobody reached for were
+	// never wanted here.
 	switch {
-	case created == len(sp.Workspaces):
+	case created == want:
 		fmt.Fprintf(out, "%s: %d workspaces created\n", sp.Name, created)
 	case created > 0:
-		fmt.Fprintf(out, "%s: %d of %d workspaces created\n", sp.Name, created, len(sp.Workspaces))
+		fmt.Fprintf(out, "%s: %d of %d workspaces created\n", sp.Name, created, want)
 	default:
-		fmt.Fprintf(out, "%s: %d workspaces in place\n", sp.Name, len(sp.Workspaces))
+		fmt.Fprintf(out, "%s: %d workspaces in place\n", sp.Name, want)
 	}
 	return nil
 }
@@ -201,7 +216,15 @@ func renderWindows(d mux.Driver, space string, ws mux.Workspace, w Workspace, fr
 			isFresh[pane] = true
 		}
 		if win.Command != "" {
-			if err := runUnless(d, ws, tab.Panes[0], win.Command, what, fresh || isFresh[tab.Panes[0]], errOut); err != nil {
+			command := win.Command
+			// on_demand: the workspace lives as long as the program
+			// does. The multiplexer says how that is spelled — leaving
+			// the shell where a workspace goes with it, its own close
+			// under cmux, which keeps the shell after the command.
+			if w.OnDemand {
+				command += "; " + d.SelfClose(ws)
+			}
+			if err := runUnless(d, ws, tab.Panes[0], command, what, fresh || isFresh[tab.Panes[0]], errOut); err != nil {
 				return err
 			}
 		}

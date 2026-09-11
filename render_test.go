@@ -204,6 +204,97 @@ func TestRenderOnCmux(t *testing.T) {
 	}
 }
 
+// TestRenderMakesAnOnDemandWorkspaceOnlyForItsOwnKey: the four
+// workspaces of the space are built as ever; the on_demand one is not
+// there until a run lands on it, and then carries the line that ends
+// it with its program.
+func TestRenderMakesAnOnDemandWorkspaceOnlyForItsOwnKey(t *testing.T) {
+	quick(t)
+	fake := muxtest.InstallFakeCmux(t)
+	fake.AddWorkspace("", "HOME")
+	d := mux.Cmux{}
+	workspaces, dirs := workContext(t, "cmux")
+	workspaces["lazygit"] = Workspace{
+		Cwd: pathList{dirs["bardo"]}, OnDemand: true,
+		Windows: []Window{{Name: "lazygit", Command: "lazygit"}},
+	}
+	sp := Space{Name: "cmux", App: "cmux", Multiplexer: "cmux", Workspaces: workspaces, Select: "pr-owl"}
+
+	// Opening the space, and reaching for another workspace's key,
+	// both leave it unborn — and say three, not four.
+	var out, errOut strings.Builder
+	for _, sel := range []string{"", "bf-1"} {
+		out.Reset()
+		if err := render(d, sp, sel, &out, &errOut); err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := fake.Workspace("lazygit"); ok {
+			t.Fatalf("select %q made the on_demand workspace anyway", sel)
+		}
+		if want := "workspaces"; !strings.Contains(out.String(), "3 "+want) {
+			t.Errorf("select %q: out %q, want a count of 3", sel, out.String())
+		}
+	}
+
+	// Its own key makes it, and the command it types ends the
+	// workspace when the program does.
+	out.Reset()
+	if err := render(d, sp, "lazygit", &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	ws, ok := fake.Workspace("lazygit")
+	if !ok {
+		t.Fatal("its own key did not make it")
+	}
+	want := []string{"lazygit; cmux workspace close --workspace '" + ws.ID + "'", "<enter>"}
+	if got := fake.Typed(ws.Panes[0].Surfaces[0].ID); !reflect.DeepEqual(got, want) {
+		t.Errorf("typed %v, want %v", got, want)
+	}
+	if fake.State().Selected != ws.ID {
+		t.Errorf("selected %q, want lazygit %q", fake.State().Selected, ws.ID)
+	}
+	if errOut.Len() > 0 {
+		t.Errorf("stderr %q", errOut.String())
+	}
+}
+
+// TestRenderKeepsAnOnDemandWorkspaceThatIsStillThere: only creation is
+// withheld. One the user is still using is rendered like any other, so
+// a key press finds its windows rather than a second copy of them.
+func TestRenderKeepsAnOnDemandWorkspaceThatIsStillThere(t *testing.T) {
+	quick(t)
+	fake := muxtest.InstallFakeCmux(t)
+	fake.AddWorkspace("", "HOME")
+	d := mux.Cmux{}
+	workspaces, dirs := workContext(t, "cmux")
+	workspaces["lazygit"] = Workspace{
+		Cwd: pathList{dirs["bardo"]}, OnDemand: true,
+		Windows: []Window{{Name: "lazygit", Command: "lazygit"}},
+	}
+	sp := Space{Name: "cmux", App: "cmux", Multiplexer: "cmux", Workspaces: workspaces, Select: "pr-owl"}
+	var out, errOut strings.Builder
+	if err := render(d, sp, "lazygit", &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	ws, _ := fake.Workspace("lazygit")
+	fake.SetForeground(ws.Panes[0].Surfaces[0].TTY, "-/bin/zsh", "/x/bin/lazygit")
+	typed := len(fake.Typed(ws.Panes[0].Surfaces[0].ID))
+
+	out.Reset()
+	if err := render(d, sp, "", &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := fake.Workspace("lazygit"); again.ID != ws.ID {
+		t.Errorf("a second lazygit: %q then %q", ws.ID, again.ID)
+	}
+	if now := len(fake.Typed(ws.Panes[0].Surfaces[0].ID)); now != typed {
+		t.Errorf("typed %d more lines into a running lazygit", now-typed)
+	}
+	if !strings.Contains(out.String(), "4 workspaces in place") {
+		t.Errorf("out %q: a living on_demand workspace counts", out.String())
+	}
+}
+
 func TestRenderWaitsForTheMultiplexer(t *testing.T) {
 	quick(t)
 	pingTimeout = 300 * time.Millisecond
