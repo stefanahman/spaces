@@ -103,7 +103,7 @@ spaces:
           - {cwd: ~/src/app}
           - {cwd: ~/src/docs, command: nvim}
     select: work              # window selected when the session is created; default: the first
-    then: tmux display-popup -E -w 88% -h 84% pr-owl   # run after `open` has focused the space
+    then: tmux display-popup -E -w 88% -h 84% owl pr   # run after `open` has focused the space
   <command-space>:
     command: herdr --session work   # instead of windows: the terminal runs this program, no tmux session
     then: say "herdr is up"         # runs through `sh -c` once the window is in front
@@ -173,8 +173,8 @@ spaces:
         windows:
           - {name: docs, panes: [{}, {cwd: ~/src/docs/site}]}
           - {name: nvim, command: nvim, cwd: ~/src/docs/site}
-      pr-owl: {cwd: ~/src/app, windows: [{name: pr-owl, command: pr-owl}]}   # pr-owl detects the multiplexer it runs in
-    select: pr-owl                # the workspace shown when the space opens
+      prs: {cwd: ~/src/app, windows: [{name: prs, command: owl pr}]}   # owl detects the multiplexer it runs in
+    select: prs                   # the workspace shown when the space opens
   cmux:
     key: c
     space: 8
@@ -182,7 +182,7 @@ spaces:
     env: {CMUX_SOCKET_MODE: allowAll}   # cmux takes its socket mode from the environment only
     multiplexer: cmux
     workspaces: *work
-    select: pr-owl
+    select: prs
 ```
 
 `open` and `focus` both build the workspaces once the window is up
@@ -305,8 +305,8 @@ spaces:
     session: work
     workspaces:
       app: {key: "1", cwd: ~/src/app, windows: [shell, {name: nvim, command: nvim}]}   # the same key, in herdr
-      pr-owl: {key: r, cwd: ~/src/app, windows: [{name: pr-owl, command: pr-owl}]}
-    select: pr-owl
+      prs: {key: r, cwd: ~/src/app, windows: [{name: prs, command: owl pr}]}
+    select: prs
 ```
 
 `spaces use` lists the multiplexers the config declares, the active
@@ -335,7 +335,7 @@ never came — is shown as a desktop notification as well.
 | `focus <name>` | the same without `then` — for other tools that just need the space in front |
 | `key <k>` | `open` what `k` is bound to — a space, or a herdr/cmux space on one of its workspaces — the active multiplexer deciding when several are; exit 1 when none is, or when a choice is needed |
 | `use [tmux\|herdr\|cmux]` | pick, or set, the active multiplexer; without an argument, off a terminal, just list them with the active one marked |
-| `list` | the active multiplexer, then name, key (a space's own, and its workspaces' in brackets), space, session state (for a command or app space: whether its window is open, and how many of its workspaces exist — `on_demand` ones counted apart, since absent is their resting state), and the [tmux-claude-status](https://github.com/stefanahman/tmux-claude-status) chip of its windows (`1⚠ 2~ 1* 3`: blocked, working, done, idle) |
+| `list` | the active multiplexer, then name, key (a space's own, and its workspaces' in brackets), space, session state (for a command or app space: whether its window is open, and how many of its workspaces exist — `on_demand` ones counted apart, since absent is their resting state), and the [claude-status](https://github.com/stefanahman/claude-status) chip of its windows (`1⚠ 2~ 1* 3`: blocked, working, done, idle) |
 | `yabai-rules` | one `yabai -m rule` per pinned space — `eval` it in your yabairc so the space number has one home |
 | `check` | missing directories (workspaces' too), commands, applications and tools, desktop spaces that don't exist or are claimed twice, a group no workspace joins, an `on_demand` workspace a space selects, and a running multiplexer that was started with the wrong environment (see *Clean launches*) |
 | `config path` | the directory it reads |
@@ -367,7 +367,7 @@ reloads.
 **Hotkeys.** With [skhd](https://github.com/koekeishiya/skhd):
 
 ```
-rctrl + ralt + rcmd - r : /opt/homebrew/bin/spaces open pr-reviews
+rctrl + ralt + rcmd - r : /opt/homebrew/bin/spaces open reviews
 ```
 
 With a Karabiner-Elements leader (a modifier chord, then a key), each
@@ -409,15 +409,17 @@ it and open its space again.
 
 **Claude state.** The `CLAUDE` column of `list` reads the
 `@claude-state` window option that
-[tmux-claude-status](https://github.com/stefanahman/tmux-claude-status)
+[claude-status](https://github.com/stefanahman/claude-status)
 maintains from Claude Code's hooks; without the plugin the column is
 empty and everything else works.
 
-**pr-owl.** `pr-reviews` is [pr-owl](https://github.com/stefanahman/pr-owl)'s
-review session, one tmux window per pull request. A `pr-reviews` space
-with `then: tmux display-popup … pr-owl` is the hotkey that opens its
-popup from anywhere, and pr-owl's `hooks.after_open: {tmux: spaces
-focus pr-reviews}` brings that terminal to the front after every open.
+**owl.** `reviews` is [owl](https://github.com/stefanahman/owl)'s
+review session, one tmux window per pull request, beside `features` for
+issues and `projects`. A space of that name with `then: tmux
+display-popup … owl pr` is the hotkey that opens its list from
+anywhere, and owl's `hooks.after_open: {tmux: spaces focus
+"$OWL_SESSION"}` brings that terminal to the front after every open —
+the variable, so one hook serves all three.
 
 ## Hacking
 
