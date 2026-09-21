@@ -38,6 +38,7 @@ type Space struct {
 	Windows     []Window             `yaml:"windows"`
 	Command     argv                 `yaml:"command"`     // runs in the terminal instead of a tmux session
 	App         string               `yaml:"app"`         // an application, by name, instead of a terminal
+	Run         string               `yaml:"run"`         // a command the key runs, through sh -c; no window, no space
 	Env         map[string]string    `yaml:"env"`         // environment the application is launched with (app spaces only)
 	Multiplexer string               `yaml:"multiplexer"` // herdr or cmux: what renders the workspaces
 	Session     string               `yaml:"session"`     // herdr: the session whose socket to use; default: herdr's default socket
@@ -127,6 +128,10 @@ func (sp Space) isCommand() bool { return len(sp.Command) > 0 }
 // isApp reports whether the space is an application's window rather
 // than a terminal.
 func (sp Space) isApp() bool { return sp.App != "" }
+
+// isRun reports whether the space is a command its key runs — a
+// toggle, a script — with no window and no desktop space at all.
+func (sp Space) isRun() bool { return strings.TrimSpace(sp.Run) != "" }
 
 // Window is a tmux window of a space. In YAML a bare string is a
 // window of that name running the shell.
@@ -454,16 +459,26 @@ func (sp Space) validate() error {
 		return fmt.Errorf("space must be a positive number, got %d", sp.Space)
 	}
 	kinds := 0
-	for _, is := range []bool{len(sp.Windows) > 0, sp.isCommand(), sp.isApp()} {
+	for _, is := range []bool{len(sp.Windows) > 0, sp.isCommand(), sp.isApp(), sp.isRun()} {
 		if is {
 			kinds++
 		}
 	}
 	switch {
 	case kinds == 0:
-		return errors.New("windows, command or app is required")
+		return errors.New("windows, command, app or run is required")
 	case kinds > 1:
-		return errors.New("windows, command and app are exclusive: a space shows a tmux session, runs a program, or is an application")
+		return errors.New("windows, command, app and run are exclusive: a space shows a tmux session, runs a program in a terminal, is an application, or runs a command with no window")
+	case sp.isRun() && sp.Key == "":
+		return errors.New("run needs a key: nothing else can reach it")
+	case sp.isRun() && sp.Space > 0:
+		return errors.New("space pins a window; a run space has none")
+	case sp.isRun() && len(sp.Cwd) > 0:
+		return errors.New("cwd applies to windows and command; a run space runs where the hotkey does")
+	case sp.isRun() && sp.Select != "":
+		return errors.New("select picks a window; a run space has none")
+	case sp.isRun() && sp.Then != "":
+		return errors.New("then runs after a window is in front; a run space has none — put it in run")
 	case sp.isCommand() && sp.Command[0] == "":
 		return errors.New("command names no program")
 	case sp.isCommand() && sp.Select != "" && !sp.hasWorkspaces():

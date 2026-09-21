@@ -32,7 +32,7 @@ func versionString() string {
 	return "dev"
 }
 
-const usage = `usage: spaces open <name>    bring the space up (its session or program in a terminal window, or its application), focus it, build its workspaces, run its then command
+const usage = `usage: spaces open <name>    bring the space up (its session or program in a terminal window, or its application), focus it, build its workspaces, run its then command — or, for a run space, run its command and return
        spaces focus <name>   same, without the then command
        spaces key <k>        open what key k is bound to: a space, or a herdr/cmux space on one of its workspaces; the active multiplexer decides when several are
        spaces list           every space with its session (or window) and Claude state

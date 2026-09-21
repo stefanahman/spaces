@@ -39,6 +39,8 @@ func openSpace(d desktop, sp Space, then bool, selectWS string, out io.Writer) e
 	}
 	defer unlock()
 	switch {
+	case sp.isRun():
+		return runSpace(sp, out)
 	case sp.isCommand():
 		return openCommand(d, sp, then, selectWS, out)
 	case sp.isApp():
@@ -175,6 +177,30 @@ func openApp(d desktop, sp Space, then bool, selectWS string, out io.Writer) err
 // shell, in the background like runThen, with the launch environment:
 // a `then` starts things too. Its output goes where spaces's does:
 // there is no session for tmux to show it in.
+// runSpace is `open` for a run space: the command, through sh -c,
+// waited for. A hotkey has no terminal, so the output goes to out —
+// nowhere, from a hotkey — and a failure becomes the error that
+// keyCmd turns into a desktop notification. That is why it waits:
+// a toggle that exited 1 in the background would fail in silence.
+// It runs with the launcher's environment, like `then`.
+func runSpace(sp Space, out io.Writer) error {
+	cmd := exec.Command("/bin/sh", "-c", sp.Run)
+	cmd.Env = launchEnv()
+	output, err := cmd.CombinedOutput()
+	if len(output) > 0 {
+		_, _ = out.Write(output)
+	}
+	if err != nil {
+		msg := strings.TrimSpace(string(output))
+		if msg == "" {
+			msg = err.Error()
+		}
+		return fmt.Errorf("%s: run: %s", sp.Name, msg)
+	}
+	fmt.Fprintf(out, "%s: ran\n", sp.Name)
+	return nil
+}
+
 func runThenCommand(sp Space) error {
 	cmd := exec.Command("/bin/sh", "-c", sp.Then)
 	cmd.Env = launchEnv()
@@ -410,6 +436,17 @@ func check(d desktop, spaces []Space, groups map[string]Group, out io.Writer) er
 		if sp.isApp() && !appBundleExists(sp.App) {
 			fmt.Fprintf(out, "error: %s: no %s.app in /Applications, ~/Applications or /System/Applications\n", sp.Name, sp.App)
 			problems++
+		}
+		if sp.isRun() {
+			// The first word is the program, as sh would see it; a
+			// run that starts with an assignment or a path is left
+			// to sh, which is what runs it.
+			if program := strings.Fields(sp.Run)[0]; !strings.ContainsAny(program, "=/") {
+				if _, err := exec.LookPath(program); err != nil {
+					fmt.Fprintf(out, "error: %s: run: %q not found on PATH\n", sp.Name, program)
+					problems++
+				}
+			}
 		}
 		problems += checkWindows(out, sp.Name, sp.Windows)
 		for _, name := range sp.workspaceNames() {

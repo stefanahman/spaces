@@ -2,6 +2,8 @@ package main
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -242,6 +244,33 @@ func TestListShowsTheMultiplexerAndWorkspaceKeys(t *testing.T) {
 	for _, want := range []string{"multiplexer: herdr\n", "herdr  h (1 r)  7      window open, ?/3 workspaces  -", "cmux   - (1)    8      -, ?/1 workspaces            -"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("list lacks %q:\n%s", want, out.String())
+		}
+	}
+}
+
+func TestKeyRunsARunSpaceWhateverIsActive(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	marker := filepath.Join(t.TempDir(), "ran")
+	spaces := []Space{
+		{Name: "bf-1", Key: "1", Space: 3, Windows: []Window{{Name: "shell"}}},
+		{Name: "mindoro", Key: "m", Run: "touch " + marker},
+	}
+	d := newFakeDesktop()
+	for _, active := range []string{"tmux", "herdr", "cmux"} {
+		if err := setActiveMultiplexer(active); err != nil {
+			t.Fatal(err)
+		}
+		os.Remove(marker)
+		var out strings.Builder
+		if err := keyCmd(func() (desktop, error) { return d, nil }, spaces, "m", &out); err != nil {
+			t.Fatalf("%s active: %v", active, err)
+		}
+		if _, err := os.Stat(marker); err != nil {
+			t.Errorf("%s active: the run space did not run", active)
+		}
+		if len(d.calls) != 0 {
+			t.Errorf("%s active: desktop calls %v", active, d.calls)
 		}
 	}
 }

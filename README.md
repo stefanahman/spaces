@@ -110,7 +110,20 @@ spaces:
   <app-space>:
     app: cmux                       # instead of windows or command: a macOS application, pinned by its name
     env: {CMUX_SOCKET_MODE: allowAll}   # its environment when this space launches it
+  <run-space>:
+    key: m                          # required: the key is the only way to reach it
+    run: mindoro toggle             # a command the key runs, through sh -c — no window, no desktop space
 ```
+
+The three kinds above open something and pin it; the fourth, a **run
+space**, opens nothing. Its key runs a command and returns: a toggle,
+a script, anything that belongs on the leader beside the spaces. It
+takes `key` and `run` only — no `space`, `cwd`, `windows`, `select`
+or `then` — and its key works whatever multiplexer is active. `run`
+is waited for: a hotkey has no terminal, so a non-zero exit becomes a
+desktop notification with the command's output, where a background
+failure would be silent. `spaces check` confirms the command's program
+is on PATH.
 
 `~` and `$VAR` are expanded. `then` runs through `tmux run-shell` inside
 the session, in the background, after a client is attached — so

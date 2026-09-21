@@ -671,3 +671,32 @@ func TestCheckWarnsWhenASpaceSelectsAnOnDemandWorkspace(t *testing.T) {
 		t.Errorf("selecting an ordinary workspace is not warned about:\n%s", out.String())
 	}
 }
+
+func TestOpenRunsACommand(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	marker := filepath.Join(t.TempDir(), "ran")
+	sp := Space{Name: "mindoro", Key: "m", Run: "touch " + marker + " && echo toggled"}
+	d := newFakeDesktop()
+	var out strings.Builder
+	if err := open(d, sp, true, &out); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Errorf("the command did not run: %v", err)
+	}
+	if got := out.String(); got != "toggled\nmindoro: ran\n" {
+		t.Errorf("output: %q", got)
+	}
+	if len(d.calls) != 0 {
+		t.Errorf("a run space touched the desktop: %v", d.calls)
+	}
+
+	// A failure carries the command's own words, since a hotkey has
+	// no terminal to show them in.
+	sp.Run = "echo 'nothing to toggle' >&2; exit 3"
+	out.Reset()
+	err := open(d, sp, true, &out)
+	if err == nil || !strings.Contains(err.Error(), "nothing to toggle") {
+		t.Errorf("error = %v, want the command's output", err)
+	}
+}
