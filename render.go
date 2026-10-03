@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -94,6 +95,9 @@ func render(d mux.Driver, sp Space, selectWS string, out, errOut io.Writer) erro
 			}
 			byName[name] = ws
 			created++
+			if err := place(d, sp, name, ws); err != nil {
+				return fmt.Errorf("%s: workspace %s: %w", sp.Name, name, err)
+			}
 			// Only what this run created. Dragging a workspace out of
 			// a group in the sidebar is a decision, and the next open
 			// must not undo it — so an existing workspace is left
@@ -123,6 +127,53 @@ func render(d mux.Driver, sp Space, selectWS string, out, errOut io.Writer) erro
 		fmt.Fprintf(out, "%s: %d of %d workspaces created\n", sp.Name, created, want)
 	default:
 		fmt.Fprintf(out, "%s: %d workspaces in place\n", sp.Name, want)
+	}
+	return nil
+}
+
+// place moves a workspace this run created to where the file declares
+// it: after the nearest workspace declared before it that exists, else
+// in front of the nearest one declared after it. herdr keeps its
+// workspaces in the order they were made, so without this one made
+// later — on_demand, or closed and made again — lands last, after
+// whatever else the session holds. Only what this run created, for the
+// reason grouping is: an existing workspace stays where the user put
+// it. A multiplexer that cannot reorder is left as it is.
+func place(d mux.Driver, sp Space, name string, ws mux.Workspace) error {
+	if _, ok := d.(mux.Mover); !ok {
+		return nil
+	}
+	list, err := d.Workspaces()
+	if err != nil {
+		return err
+	}
+	at := map[string]int{}
+	for i, w := range list {
+		at[w.Name] = i
+	}
+	from, ok := at[name]
+	if !ok {
+		return nil
+	}
+	names := sp.workspaceNames()
+	i := slices.Index(names, name)
+	// Indexes are of the order after the move: taking the workspace out
+	// shifts everything after it one to the left.
+	for j := i - 1; j >= 0; j-- {
+		if prev, ok := at[names[j]]; ok {
+			if prev < from {
+				prev++
+			}
+			return mux.Move(d, ws, prev)
+		}
+	}
+	for _, next := range names[i+1:] {
+		if k, ok := at[next]; ok {
+			if k > from {
+				k--
+			}
+			return mux.Move(d, ws, k)
+		}
 	}
 	return nil
 }

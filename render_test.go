@@ -186,6 +186,83 @@ func TestRenderCreatesWorkspacesInTheOrderDeclared(t *testing.T) {
 	}
 }
 
+// TestRenderPlacesAWorkspaceMadeLater: herdr appends what it makes, so
+// a workspace made after the others — closed and made again, or
+// on_demand — would land after whatever the session gathered since.
+func TestRenderPlacesAWorkspaceMadeLater(t *testing.T) {
+	d, sp := orderedContext(t)
+	var out, errOut strings.Builder
+	if err := render(d, sp, "", &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if _, err := d.Create("proj-paris", dir); err != nil { // owl's, say
+		t.Fatal(err)
+	}
+	for _, w := range mustWorkspaces(t, d) {
+		if w.Name == "laurenecoral" {
+			if err := d.Close(w); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := render(d, sp, "", &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := workspaceOrder(t, d), []string{"~", "norrbrunn", "laurenecoral", "voyage", "owl", "proj-paris"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("made again: order %v, want %v", got, want)
+	}
+	// The first declared, made again with nothing declared before it
+	// still there, goes in front of the next one.
+	for _, w := range mustWorkspaces(t, d) {
+		if w.Name == "norrbrunn" {
+			if err := d.Close(w); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := render(d, sp, "", &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := workspaceOrder(t, d), []string{"~", "norrbrunn", "laurenecoral", "voyage", "owl", "proj-paris"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("first made again: order %v, want %v", got, want)
+	}
+	if err := render(d, sp, "lazygit", &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := workspaceOrder(t, d), []string{"~", "norrbrunn", "laurenecoral", "voyage", "owl", "lazygit", "proj-paris"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("on_demand: order %v, want %v", got, want)
+	}
+}
+
+// TestRenderLeavesTheOrderOfWhatExists: a workspace already there stays
+// where it is, as with grouping — the order may be the user's.
+func TestRenderLeavesTheOrderOfWhatExists(t *testing.T) {
+	d, sp := orderedContext(t)
+	dir := t.TempDir()
+	for _, name := range []string{"owl", "voyage", "norrbrunn", "laurenecoral"} {
+		if _, err := d.Create(name, dir); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var out, errOut strings.Builder
+	if err := render(d, sp, "", &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := workspaceOrder(t, d), []string{"~", "owl", "voyage", "norrbrunn", "laurenecoral"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("order %v, want it left as %v", got, want)
+	}
+}
+
+func mustWorkspaces(t *testing.T, d mux.Driver) []mux.Workspace {
+	t.Helper()
+	list, err := d.Workspaces()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return list
+}
+
 func TestRenderOnCmux(t *testing.T) {
 	quick(t)
 	fake := muxtest.InstallFakeCmux(t)
