@@ -100,6 +100,46 @@ spaces:
 	}
 }
 
+// TestWorkspacesKeepTheirDeclaredOrder: the map the workspaces decode
+// into keeps no order, so the file's is read beside it — through an
+// alias too, the way bardo's cmux space shares the herdr space's.
+func TestWorkspacesKeepTheirDeclaredOrder(t *testing.T) {
+	t.Setenv("HOME", "/home/owl")
+	spaces, _, err := mergeSpaces([]source{{"personal.yaml", []byte(`
+spaces:
+  herdr:
+    key: h
+    command: herdr
+    multiplexer: herdr
+    workspaces: &work
+      norrbrunn:    {key: "1", cwd: ~/n, windows: [shell]}
+      laurenecoral: {key: "2", cwd: ~/l, windows: [shell]}
+      voyage:       {key: "3", cwd: ~/v, windows: [shell]}
+      owl:          {key: o, cwd: ~/o, windows: [shell]}
+      lazygit:      {key: g, on_demand: true, cwd: ~/n, windows: [{name: lazygit, command: lazygit}]}
+  cmux:
+    key: c
+    app: cmux
+    multiplexer: cmux
+    workspaces: *work
+`)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"norrbrunn", "laurenecoral", "voyage", "owl", "lazygit"}
+	for _, name := range []string{"herdr", "cmux"} {
+		sp, _ := find(spaces, name)
+		if got := sp.workspaceNames(); !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: workspace names = %v, want %v", name, got, want)
+		}
+	}
+	// A Space built in code has no file order: name order, as before.
+	sp := Space{Workspaces: map[string]Workspace{"b": {}, "a": {}}}
+	if got := sp.workspaceNames(); !reflect.DeepEqual(got, []string{"a", "b"}) {
+		t.Errorf("no declared order: %v", got)
+	}
+}
+
 func TestWorkspaces(t *testing.T) {
 	t.Setenv("HOME", "/home/owl")
 	spaces, _, err := mergeSpaces([]source{{"bardo.yaml", []byte(`

@@ -199,9 +199,9 @@ spaces:
 ```
 
 `open` and `focus` both build the workspaces once the window is up
-and before `then`. Workspaces are created in name order, each in the
-directory of its first window's first pane (else the window's, else
-its own). The first window is the pane a workspace comes with; every
+and before `then`. Workspaces are created in the order the file
+declares them, each in the directory of its first window's first pane
+(else the window's, else its own). The first window is the pane a workspace comes with; every
 window after it is a tab — a herdr tab, a cmux surface — and every
 pane after a window's first a split off it (`split: vertical` splits
 downward). What exists is found by name (workspaces) or by position

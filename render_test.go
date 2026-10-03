@@ -134,6 +134,58 @@ func TestRenderOnHerdr(t *testing.T) {
 	}
 }
 
+// orderedContext is a herdr space declared out of name order, with a
+// workspace herdr made itself already there, the way a session starts.
+func orderedContext(t *testing.T) (mux.Driver, Space) {
+	t.Helper()
+	quick(t)
+	fake := muxtest.NewFakeHerdr(t)
+	for _, v := range []string{"HERDR_ENV", "HERDR_WORKSPACE_ID", "HERDR_SESSION"} {
+		t.Setenv(v, "")
+	}
+	d := mux.NewHerdr(fake.Socket())
+	dir := t.TempDir()
+	if _, err := d.Create("~", dir); err != nil {
+		t.Fatal(err)
+	}
+	shell := Workspace{Cwd: pathList{dir}, Windows: []Window{{Name: "shell"}}}
+	order := []string{"norrbrunn", "laurenecoral", "voyage", "owl", "lazygit"}
+	workspaces := map[string]Workspace{}
+	for _, name := range order {
+		workspaces[name] = shell
+	}
+	lazygit := shell
+	lazygit.OnDemand = true
+	workspaces["lazygit"] = lazygit
+	return d, Space{Name: "herdr", Command: argv{"herdr"}, Multiplexer: "herdr", Workspaces: workspaces, order: order}
+}
+
+func workspaceOrder(t *testing.T, d mux.Driver) []string {
+	t.Helper()
+	list, err := d.Workspaces()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, w := range list {
+		names = append(names, w.Name)
+	}
+	return names
+}
+
+func TestRenderCreatesWorkspacesInTheOrderDeclared(t *testing.T) {
+	d, sp := orderedContext(t)
+	var out, errOut strings.Builder
+	if err := render(d, sp, "", &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	// Not laurenecoral, norrbrunn, owl, voyage: a context's numbered
+	// workspaces read 1, 2, 3. herdr's own stays where it was.
+	if got, want := workspaceOrder(t, d), []string{"~", "norrbrunn", "laurenecoral", "voyage", "owl"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("order %v, want %v", got, want)
+	}
+}
+
 func TestRenderOnCmux(t *testing.T) {
 	quick(t)
 	fake := muxtest.InstallFakeCmux(t)

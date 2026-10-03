@@ -47,7 +47,8 @@ type Space struct {
 	Select      string               `yaml:"select"`      // window selected when the session is created (default: the first), or the workspace shown when the space opens
 	Then        string               `yaml:"then"`        // run after `open` has focused the space
 
-	file string // where it was declared, for error messages
+	file  string   // where it was declared, for error messages
+	order []string // the workspaces in the order the file lists them, which the map does not keep
 }
 
 // Workspace is one workspace inside a herdr or cmux space: its
@@ -83,15 +84,74 @@ func (g Group) same(other Group) bool { return g.Color == other.Color && g.Icon 
 // multiplexer.
 func (sp Space) hasWorkspaces() bool { return len(sp.Workspaces) > 0 }
 
-// workspaceNames lists the workspaces in name order: the order they
-// are created in, the same every time.
+// workspaceNames lists the workspaces in the order the file declares
+// them: the order they are created in, so a context's numbered
+// workspaces show in a herdr sidebar as 1, 2, 3 rather than by name.
+// Any the order does not hold — a Space built in code — follow, in
+// name order.
 func (sp Space) workspaceNames() []string {
 	names := make([]string, 0, len(sp.Workspaces))
-	for name := range sp.Workspaces {
-		names = append(names, name)
+	seen := map[string]bool{}
+	for _, name := range sp.order {
+		if _, ok := sp.Workspaces[name]; ok && !seen[name] {
+			names = append(names, name)
+			seen[name] = true
+		}
 	}
-	sort.Strings(names)
-	return names
+	var rest []string
+	for name := range sp.Workspaces {
+		if !seen[name] {
+			rest = append(rest, name)
+		}
+	}
+	sort.Strings(rest)
+	return append(names, rest...)
+}
+
+// declaredOrder reads, per space, the order its workspaces are listed
+// in: the YAML node tree keeps it where the map they decode into does
+// not. An alias is followed, so a space sharing another's workspaces
+// through an anchor (`workspaces: *work`) gets the anchor's order.
+func declaredOrder(data []byte) map[string][]string {
+	var doc yaml.Node
+	if yaml.Unmarshal(data, &doc) != nil || len(doc.Content) == 0 {
+		return nil
+	}
+	value := func(m *yaml.Node, key string) *yaml.Node {
+		for m != nil && m.Kind == yaml.AliasNode {
+			m = m.Alias
+		}
+		if m == nil || m.Kind != yaml.MappingNode {
+			return nil
+		}
+		for i := 0; i+1 < len(m.Content); i += 2 {
+			if m.Content[i].Value == key {
+				v := m.Content[i+1]
+				for v.Kind == yaml.AliasNode {
+					v = v.Alias
+				}
+				return v
+			}
+		}
+		return nil
+	}
+	spaces := value(doc.Content[0], "spaces")
+	if spaces == nil {
+		return nil
+	}
+	orders := map[string][]string{}
+	for i := 0; i+1 < len(spaces.Content); i += 2 {
+		ws := value(spaces.Content[i+1], "workspaces")
+		if ws == nil || ws.Kind != yaml.MappingNode {
+			continue
+		}
+		var names []string
+		for j := 0; j+1 < len(ws.Content); j += 2 {
+			names = append(names, ws.Content[j].Value)
+		}
+		orders[spaces.Content[i].Value] = names
+	}
+	return orders
 }
 
 // workspaceKeys lists the keys bound to the space's workspaces, sorted.
@@ -326,6 +386,7 @@ func mergeSpaces(sources []source) ([]Space, map[string]Group, error) {
 		if err := dec.Decode(&file); err != nil && !errors.Is(err, io.EOF) {
 			return nil, nil, fmt.Errorf("%s: %w", src.name, err)
 		}
+		orders := declaredOrder(src.data)
 		groupNames := make([]string, 0, len(file.Groups))
 		for name := range file.Groups {
 			groupNames = append(groupNames, name)
@@ -353,6 +414,7 @@ func mergeSpaces(sources []source) ([]Space, map[string]Group, error) {
 			sp := file.Spaces[name]
 			sp.Name = name
 			sp.file = src.name
+			sp.order = orders[name]
 			if prev, dup := byName[name]; dup {
 				return nil, nil, fmt.Errorf("space %q is declared in both %s and %s", name, prev.file, src.name)
 			}
