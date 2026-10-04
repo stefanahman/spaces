@@ -14,12 +14,25 @@ import (
 )
 
 // TestMain lets the test binary stand in for the cmux CLI (see
-// muxtest.FakeCmuxMain).
+// muxtest.FakeCmuxMain), and keeps every test's lock files and state
+// out of the developer's own directories, whether or not the test
+// remembers to: a test that wants a directory of its own still sets it.
 func TestMain(m *testing.M) {
 	if filepath.Base(os.Args[0]) == "cmux" {
 		os.Exit(muxtest.FakeCmuxMain(os.Args[1:]))
 	}
-	os.Exit(m.Run())
+	dir, err := os.MkdirTemp("", "spaces-test")
+	if err != nil {
+		panic(err)
+	}
+	for _, v := range []string{"XDG_CACHE_HOME", "XDG_STATE_HOME"} {
+		if err := os.Setenv(v, filepath.Join(dir, v)); err != nil {
+			panic(err)
+		}
+	}
+	code := m.Run()
+	_ = os.RemoveAll(dir)
+	os.Exit(code)
 }
 
 // workContext is the layout the eden config declares: shells and nvim
