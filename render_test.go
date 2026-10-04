@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -137,6 +138,11 @@ func TestRenderOnHerdr(t *testing.T) {
 // orderedContext is a herdr space declared out of name order, with a
 // workspace herdr made itself already there, the way a session starts.
 func orderedContext(t *testing.T) (mux.Driver, Space) {
+	d, sp, _ := orderedContextFake(t)
+	return d, sp
+}
+
+func orderedContextFake(t *testing.T) (mux.Driver, Space, *muxtest.FakeHerdr) {
 	t.Helper()
 	quick(t)
 	fake := muxtest.NewFakeHerdr(t)
@@ -157,7 +163,7 @@ func orderedContext(t *testing.T) (mux.Driver, Space) {
 	lazygit := shell
 	lazygit.OnDemand = true
 	workspaces["lazygit"] = lazygit
-	return d, Space{Name: "herdr", Command: argv{"herdr"}, Multiplexer: "herdr", Workspaces: workspaces, order: order}
+	return d, Space{Name: "herdr", Command: argv{"herdr"}, Multiplexer: "herdr", Workspaces: workspaces, order: order}, fake
 }
 
 func workspaceOrder(t *testing.T, d mux.Driver) []string {
@@ -232,6 +238,71 @@ func TestRenderPlacesAWorkspaceMadeLater(t *testing.T) {
 	}
 	if got, want := workspaceOrder(t, d), []string{"~", "norrbrunn", "laurenecoral", "voyage", "owl", "lazygit", "proj-paris"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("on_demand: order %v, want %v", got, want)
+	}
+}
+
+// failingMover is a herdr whose moves all fail — a transient socket
+// error, or a herdr without workspace.move.
+type failingMover struct{ mux.Herdr }
+
+func (failingMover) Move(mux.Workspace, int) error { return errors.New("herdr: method_not_found") }
+
+// TestRenderBuildsWhatAFailedMoveLeaves: putting a workspace in its
+// place is cosmetic, and must not cost the workspace its windows or the
+// ones after it their creation. The failure is said, not returned.
+func TestRenderBuildsWhatAFailedMoveLeaves(t *testing.T) {
+	d, sp, fake := orderedContextFake(t)
+	var out, errOut strings.Builder
+	if err := render(d, sp, "", &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Create("proj-paris", t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range mustWorkspaces(t, d) {
+		if w.Name == "laurenecoral" || w.Name == "voyage" {
+			if err := d.Close(w); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	// laurenecoral runs a command, so its windows being built shows.
+	l := sp.Workspaces["laurenecoral"]
+	l.Windows = []Window{{Name: "ed", Command: "ed"}}
+	sp.Workspaces["laurenecoral"] = l
+
+	errOut.Reset()
+	if err := render(failingMover{d.(mux.Herdr)}, sp, "", &out, &errOut); err != nil {
+		t.Fatalf("a failed move failed the render: %v", err)
+	}
+	if fake.Workspace("voyage") == nil {
+		t.Error("the workspace after the failed move was never made")
+	}
+	if lc := fake.Workspace("laurenecoral"); lc == nil || !reflect.DeepEqual(fake.Typed(lc.Pane()), []string{"ed<enter>"}) {
+		t.Errorf("laurenecoral's window was not built: %+v", lc)
+	}
+	if !strings.Contains(errOut.String(), "method_not_found") {
+		t.Errorf("the failed move went unsaid: %q", errOut.String())
+	}
+}
+
+// TestRenderSendsNoMoveForAWorkspaceInPlace: a fresh render makes each
+// workspace after the last, which is its place; asking herdr to move it
+// there costs a list and a move for nothing.
+func TestRenderSendsNoMoveForAWorkspaceInPlace(t *testing.T) {
+	d, sp, fake := orderedContextFake(t)
+	lists := fake.Calls("workspace.list")
+	var out, errOut strings.Builder
+	if err := render(d, sp, "", &out, &errOut); err != nil {
+		t.Fatal(err)
+	}
+	created := 4 // norrbrunn, laurenecoral, voyage, owl; lazygit waits for its key
+	if moves := fake.Calls("workspace.move"); moves != 0 {
+		t.Errorf("%d moves sent on a fresh render", moves)
+	}
+	// One list for the render, one per workspace placed.
+	if got := fake.Calls("workspace.list") - lists; got != 1+created {
+		t.Errorf("%d workspace lists, want %d", got, 1+created)
 	}
 }
 

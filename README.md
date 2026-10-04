@@ -203,8 +203,10 @@ and before `then`. Workspaces are created in the order the file
 declares them, each in the directory of its first window's first pane
 (else the window's, else its own). herdr keeps them in the order they
 were made, so one made while others exist — `on_demand`, or closed and
-made again — is moved to its declared place, after the nearest
-workspace declared before it. One that exists is never moved: an
+made again — is moved to its declared place once its windows are
+built: after the nearest workspace declared before it, else in front
+of the nearest one declared after it. A move that fails is said on
+stderr and costs nothing else. One that exists is never moved: an
 order set by hand in the sidebar stays. The first window is the pane a workspace comes with; every
 window after it is a tab — a herdr tab, a cmux surface — and every
 pane after a window's first a split off it (`split: vertical` splits
@@ -219,9 +221,9 @@ the look is `ps` on the surface's tty where cmux knows it (the
 surface a workspace was created with) and the tab's title otherwise —
 cmux's shell integration names the running program there, or the
 directory at a prompt. The multiplexer gets 20 seconds to answer
-after its launch, and is read three times per run, not per workspace,
-plus once for each workspace a herdr space makes: a key press costs a
-fraction of a second.
+after its launch. A run lists its workspaces once and reads each one's
+tabs and panes, and under herdr lists them again for each workspace it
+makes: a key press costs a fraction of a second.
 
 `multiplexer` and `workspaces` come together, each an error without
 the other; `session` applies to herdr. `select` names a workspace.

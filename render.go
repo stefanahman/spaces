@@ -93,9 +93,6 @@ func render(d mux.Driver, sp Space, selectWS string, out, errOut io.Writer) erro
 			}
 			byName[name] = ws
 			created++
-			if err := place(d, sp, name, ws); err != nil {
-				return fmt.Errorf("%s: workspace %s: %w", sp.Name, name, err)
-			}
 			// Only what this run created. Dragging a workspace out of
 			// a group in the sidebar is a decision, and the next open
 			// must not undo it — so an existing workspace is left
@@ -108,6 +105,14 @@ func render(d mux.Driver, sp Space, selectWS string, out, errOut io.Writer) erro
 		}
 		if err := renderWindows(d, sp.Name, ws, w, fresh, errOut); err != nil {
 			return err
+		}
+		// After its windows, and never fatal: the place is cosmetic, and
+		// a failed move must not leave the workspace half built or the
+		// ones after it unmade.
+		if fresh {
+			if err := place(d, sp, name, ws); err != nil {
+				fmt.Fprintf(errOut, "%s: workspace %s: not moved to its place: %v\n", sp.Name, name, err)
+			}
 		}
 	}
 	if selectWS != "" {
@@ -157,23 +162,29 @@ func place(d mux.Driver, sp Space, name string, ws mux.Workspace) error {
 	i := slices.Index(names, name)
 	// Indexes are of the order after the move: taking the workspace out
 	// shifts everything after it one to the left.
-	for j := i - 1; j >= 0; j-- {
+	to := -1
+	for j := i - 1; j >= 0 && to < 0; j-- {
 		if prev, ok := at[names[j]]; ok {
+			to = prev
 			if prev < from {
-				prev++
+				to++
 			}
-			return mux.Move(d, ws, prev)
 		}
 	}
-	for _, next := range names[i+1:] {
-		if k, ok := at[next]; ok {
-			if k > from {
-				k--
+	for k := i + 1; k < len(names) && to < 0; k++ {
+		if next, ok := at[names[k]]; ok {
+			to = next
+			if next > from {
+				to--
 			}
-			return mux.Move(d, ws, k)
 		}
 	}
-	return nil
+	// Made last, a workspace usually is in its place already: herdr
+	// need not be asked.
+	if to < 0 || to == from {
+		return nil
+	}
+	return mux.Move(d, ws, to)
 }
 
 // waitForPing gives the multiplexer time to come up after its launch.
