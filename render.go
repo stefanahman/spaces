@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -26,9 +25,8 @@ var newDriver = func(kind, session, socket string) mux.Driver {
 	case "tmux":
 		return mux.Tmux{}
 	case "herdr":
-		if session != "" && socket == "" {
-			home, _ := os.UserHomeDir()
-			socket = filepath.Join(home, ".config", "herdr", "sessions", session, "herdr.sock")
+		if socket == "" {
+			return mux.NewHerdrSession(session)
 		}
 		return mux.NewHerdr(socket)
 	case "cmux":

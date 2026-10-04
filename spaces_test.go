@@ -131,7 +131,7 @@ func (d *fakeDesktop) notify(title, text string) error {
 // <session> prints nothing without a client, so ask list-windows.)
 func activeWindow(t *testing.T, session string) string {
 	t.Helper()
-	out, err := tmux("list-windows", "-t", target(session, ""), "-F", "#{window_active} #{window_name}")
+	out, err := tmux("list-windows", "-t", mux.TmuxTarget(session, ""), "-F", "#{window_active} #{window_name}")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,10 +183,10 @@ func TestOpenCreatesTheSpace(t *testing.T) {
 			t.Errorf("%s = %q, want %q", opt.name, v, opt.want)
 		}
 	}
-	if panes, _ := tmux("list-panes", "-t", target("bf-1", "eden"), "-F", "#{pane_current_path}"); panes != eden+"\n"+app {
+	if panes, _ := tmux("list-panes", "-t", mux.TmuxTarget("bf-1", "eden"), "-F", "#{pane_current_path}"); panes != eden+"\n"+app {
 		t.Errorf("eden panes = %q", panes)
 	}
-	if cwd, _ := tmux("display-message", "-p", "-t", target("bf-1", "nvim"), "#{pane_current_path}"); cwd != eden {
+	if cwd, _ := tmux("display-message", "-p", "-t", mux.TmuxTarget("bf-1", "nvim"), "#{pane_current_path}"); cwd != eden {
 		t.Errorf("nvim cwd = %q, want %q", cwd, eden)
 	}
 	if active := activeWindow(t, "bf-1"); active != "nvim" {
@@ -219,10 +219,10 @@ func TestOpenIsIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The user renamed nothing but closed nvim and moved to shell.
-	if _, err := tmux("kill-window", "-t", target("eden", "nvim")); err != nil {
+	if _, err := tmux("kill-window", "-t", mux.TmuxTarget("eden", "nvim")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tmux("select-window", "-t", target("eden", "shell")); err != nil {
+	if _, err := tmux("select-window", "-t", mux.TmuxTarget("eden", "shell")); err != nil {
 		t.Fatal(err)
 	}
 	d.calls = nil
@@ -378,7 +378,7 @@ func TestOpenRefusesToDuplicateAnAttachedSession(t *testing.T) {
 	}
 	// A terminal attaches through a real pty, then the window manager
 	// stops seeing the window (a locked screen does exactly this).
-	attach := exec.Command("tmux", "attach-session", "-t", target("seen", ""))
+	attach := exec.Command("tmux", "attach-session", "-t", mux.TmuxTarget("seen", ""))
 	attach.Env = append(os.Environ(), "TERM=xterm")
 	ptmx, err := pty.Start(attach)
 	if err != nil {
@@ -427,7 +427,7 @@ func TestList(t *testing.T) {
 	if err := open(newFakeDesktop(), sp, false, &strings.Builder{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tmux("set-option", "-w", "-t", target("bf-1", "shell"), "@claude-state", "blocked"); err != nil {
+	if _, err := tmux("set-option", "-w", "-t", mux.TmuxTarget("bf-1", "shell"), mux.ClaudeStateOption, "blocked"); err != nil {
 		t.Fatal(err)
 	}
 	var out strings.Builder

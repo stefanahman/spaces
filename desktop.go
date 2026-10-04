@@ -16,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/stefanahman/mux"
 )
 
 type desktop interface {
@@ -203,7 +205,7 @@ func attachCommand(session string) ([]string, error) {
 	if err != nil {
 		return nil, errors.New("tmux not found on PATH")
 	}
-	return []string{tmuxPath, "attach-session", "-t", target(session, "")}, nil
+	return []string{tmuxPath, "attach-session", "-t", mux.TmuxTarget(session, "")}, nil
 }
 
 // ensureWindow finds the space's terminal window or spawns one running

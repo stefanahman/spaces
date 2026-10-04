@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"text/tabwriter"
 	"time"
+
+	"github.com/stefanahman/mux"
 )
 
 // yabaiRegex escapes what an app name may contain that a regex reads
@@ -279,7 +281,7 @@ func list(d desktop, spaces []Space, out io.Writer) error {
 		}
 	}
 	claude := map[string]map[string]int{}
-	if outStr, err := tmux("list-windows", "-a", "-F", "#{@claude-state}:#{session_name}"); err == nil {
+	if outStr, err := tmux("list-windows", "-a", "-F", "#{"+mux.ClaudeStateOption+"}:#{session_name}"); err == nil {
 		for _, line := range strings.Split(outStr, "\n") {
 			state, name, _ := strings.Cut(line, ":")
 			if state == "" {

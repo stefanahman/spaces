@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/stefanahman/mux"
 )
 
 // tmux runs a tmux command and returns trimmed stdout. Errors carry
@@ -38,19 +40,9 @@ func runOut(cmd *exec.Cmd) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// target builds an exact-match `-t` argument. Without the `=` prefix
-// tmux falls back to prefix matching, so `bf-1` would resolve to
-// `bf-10` when `bf-1` itself doesn't exist.
-func target(session, window string) string {
-	if window == "" {
-		return "=" + session
-	}
-	return "=" + session + ":=" + window
-}
-
 // windowNames lists the windows of a session; nil when it doesn't exist.
 func windowNames(session string) []string {
-	out, err := tmux("list-windows", "-t", target(session, ""), "-F", "#{window_name}")
+	out, err := tmux("list-windows", "-t", mux.TmuxTarget(session, ""), "-F", "#{window_name}")
 	if err != nil || out == "" {
 		return nil
 	}
@@ -76,7 +68,7 @@ func ensureSession(sp Space) (created bool, err error) {
 		if err != nil {
 			return false, err
 		}
-		args := []string{"new-window", "-d", "-t", target(sp.Name, ""), "-n", w.Name}
+		args := []string{"new-window", "-d", "-t", mux.TmuxTarget(sp.Name, ""), "-n", w.Name}
 		if created && i == 0 {
 			args = []string{"new-session", "-d", "-s", sp.Name, "-n", w.Name}
 		}
@@ -147,7 +139,7 @@ func addPanes(sp Space, w Window, spaceCwd string) error {
 				return fmt.Errorf("space %q window %q pane %d: none of cwd %v exists", sp.Name, w.Name, i+1, p.Cwd)
 			}
 		}
-		args := []string{"split-window", "-d", dir, "-t", target(sp.Name, w.Name)}
+		args := []string{"split-window", "-d", dir, "-t", mux.TmuxTarget(sp.Name, w.Name)}
 		if cwd != "" {
 			args = append(args, "-c", cwd)
 		}
@@ -158,7 +150,7 @@ func addPanes(sp Space, w Window, spaceCwd string) error {
 			return err
 		}
 	}
-	_, err := tmux("select-layout", "-t", target(sp.Name, w.Name), layout)
+	_, err := tmux("select-layout", "-t", mux.TmuxTarget(sp.Name, w.Name), layout)
 	return err
 }
 
@@ -170,13 +162,13 @@ func selectWindow(sp Space) error {
 	if name == "" {
 		name = sp.Windows[0].Name
 	}
-	_, err := tmux("select-window", "-t", target(sp.Name, name))
+	_, err := tmux("select-window", "-t", mux.TmuxTarget(sp.Name, name))
 	return err
 }
 
 // hasClient reports whether a client is attached to the session.
 func hasClient(session string) bool {
-	out, err := tmux("list-clients", "-t", target(session, ""), "-F", "#{client_tty}")
+	out, err := tmux("list-clients", "-t", mux.TmuxTarget(session, ""), "-F", "#{client_tty}")
 	return err == nil && out != ""
 }
 
@@ -202,6 +194,6 @@ func runThen(sp Space) error {
 	if sp.Then == "" {
 		return nil
 	}
-	_, err := tmux("run-shell", "-b", "-t", target(sp.Name, ""), sp.Then)
+	_, err := tmux("run-shell", "-b", "-t", mux.TmuxTarget(sp.Name, ""), sp.Then)
 	return err
 }
