@@ -41,7 +41,7 @@ homebrew_casks:
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     homepage: https://github.com/stefanahman/spaces
-    description: "One config for your windows on desktop spaces: tmux sessions, programs, applications"
+    description: "Hotkeys for tmux, herdr and cmux workspaces, pinned to desktop spaces"
     license: MIT
     binaries: [spaces]
     dependencies:
