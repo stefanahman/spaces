@@ -140,6 +140,38 @@ spaces:
 	}
 }
 
+// TestWorkspacesKeepTheOrderOfAMerge: a merge key (`<<: *work`) puts
+// the anchor's workspaces where it stands, in their order, and a key
+// written beside it that the anchor also has stays where it is written.
+func TestWorkspacesKeepTheOrderOfAMerge(t *testing.T) {
+	t.Setenv("HOME", "/home/owl")
+	spaces, _, err := mergeSpaces([]source{{"personal.yaml", []byte(`
+spaces:
+  herdr:
+    key: h
+    command: herdr
+    multiplexer: herdr
+    workspaces: &work
+      zeta:  {key: "1", cwd: ~/z, windows: [shell]}
+      alpha: {key: "2", cwd: ~/a, windows: [shell]}
+  cmux:
+    key: c
+    app: cmux
+    multiplexer: cmux
+    workspaces:
+      first: {key: "0", cwd: ~/f, windows: [shell]}
+      <<: *work
+      mid:   {key: "3", cwd: ~/m, windows: [shell]}
+`)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sp, _ := find(spaces, "cmux")
+	if got, want := sp.workspaceNames(), []string{"first", "zeta", "alpha", "mid"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("workspace names = %v, want %v", got, want)
+	}
+}
+
 func TestWorkspaces(t *testing.T) {
 	t.Setenv("HOME", "/home/owl")
 	spaces, _, err := mergeSpaces([]source{{"bardo.yaml", []byte(`

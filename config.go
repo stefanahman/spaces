@@ -108,6 +108,52 @@ func (sp Space) workspaceNames() []string {
 	return append(names, rest...)
 }
 
+// mappingKeys lists a mapping's keys in order, with a merge key (`<<:`)
+// standing for the keys of what it merges, in their order, where it is
+// written. A key written in the mapping itself keeps its own place,
+// since it is the one that counts.
+func mappingKeys(m *yaml.Node) []string {
+	written := map[string]bool{}
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if k := m.Content[i]; k.Value != "<<" {
+			written[k.Value] = true
+		}
+	}
+	var keys []string
+	seen := map[string]bool{}
+	add := func(k string) {
+		if !seen[k] {
+			seen[k] = true
+			keys = append(keys, k)
+		}
+	}
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		k, v := m.Content[i], m.Content[i+1]
+		if k.Value != "<<" {
+			add(k.Value)
+			continue
+		}
+		merged := []*yaml.Node{v}
+		if v.Kind == yaml.SequenceNode {
+			merged = v.Content
+		}
+		for _, n := range merged {
+			for n != nil && n.Kind == yaml.AliasNode {
+				n = n.Alias
+			}
+			if n == nil || n.Kind != yaml.MappingNode {
+				continue
+			}
+			for _, mk := range mappingKeys(n) {
+				if !written[mk] {
+					add(mk)
+				}
+			}
+		}
+	}
+	return keys
+}
+
 // declaredOrder reads, per space, the order its workspaces are listed
 // in: the YAML node tree keeps it where the map they decode into does
 // not. An alias is followed, so a space sharing another's workspaces
@@ -145,11 +191,7 @@ func declaredOrder(data []byte) map[string][]string {
 		if ws == nil || ws.Kind != yaml.MappingNode {
 			continue
 		}
-		var names []string
-		for j := 0; j+1 < len(ws.Content); j += 2 {
-			names = append(names, ws.Content[j].Value)
-		}
-		orders[spaces.Content[i].Value] = names
+		orders[spaces.Content[i].Value] = mappingKeys(ws)
 	}
 	return orders
 }
