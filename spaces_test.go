@@ -14,6 +14,7 @@ import (
 
 	"github.com/creack/pty"
 	"github.com/stefanahman/mux"
+	"github.com/stefanahman/mux/muxtest"
 )
 
 // unsetenv removes a variable for the rest of the test; t.Setenv can
@@ -26,35 +27,13 @@ func unsetenv(t *testing.T, name string) {
 	os.Unsetenv(name)
 }
 
-// startTmux runs a private tmux server for the test: its own socket
-// directory (Unix socket paths are short-limited and t.TempDir is
-// long), its own minimal config (/bin/sh in every window — the
-// developer's shell would write history into $HOME on exit), and the
-// inherited $TMUX cleared so a test run from inside tmux never reaches
-// the developer's server.
+// startTmux runs a private tmux server for the test — mux's, which
+// starts it with a clean environment, so a test run from a Claude Code
+// session or a herdr pane hands its windows none of their markers.
 func startTmux(t *testing.T) {
 	t.Helper()
-	if _, err := exec.LookPath("tmux"); err != nil {
-		t.Skip("tmux not installed")
-	}
-	sockDir, err := os.MkdirTemp("", "spaces")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
-	conf := filepath.Join(sockDir, "tmux.conf")
-	if err := os.WriteFile(conf, []byte("set -g default-shell /bin/sh\nset -s exit-empty off\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TMUX_TMPDIR", sockDir)
-	t.Setenv("TMUX", "")
-	t.Setenv("HISTFILE", "")
-	t.Setenv("XDG_CACHE_HOME", t.TempDir()) // open's lock files stay out of the developer's cache
-	if _, err := tmux("-L", "default", "-f", conf, "start-server"); err != nil {
-		t.Fatal(err)
-	}
-	socket := filepath.Join(sockDir, fmt.Sprintf("tmux-%d", os.Getuid()), "default")
-	t.Cleanup(func() { _ = exec.Command("tmux", "-S", socket, "kill-server").Run() })
+	muxtest.StartTmux(t)
+	t.Setenv("XDG_CACHE_HOME", t.TempDir()) // open's lock files, in a directory of this test's own
 }
 
 // fakeDesktop records what open asks of the window manager. A spawned
