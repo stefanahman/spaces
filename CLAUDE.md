@@ -1,7 +1,7 @@
 # spaces — agent notes
 
 spaces keeps one config for windows on desktop spaces and the hotkeys
-that reach them (README.md); it imports mux for herdr and cmux
+that reach them (README.md, docs/); it imports mux for herdr and cmux
 workspaces. It ships as a Homebrew cask, `stefanahman/tap/spaces`.
 
 A change is done when it is committed in coherent pieces, pushed with
@@ -57,8 +57,9 @@ after a release, install again so the two agree.
 
 ## Document
 
-README.md is the reference for the config keys and the verbs; a new
-key or verb lands there in the same commit series.
+docs/config.md is the reference for the config keys, docs/commands.md
+for the verbs; a new key or verb lands there in the same commit series,
+and README.md stays a short front page.
 
 Three consumers live outside this repo, and a renamed verb or key
 breaks them silently: Karabiner runs `spaces key <k>` for every leader
