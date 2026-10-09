@@ -20,7 +20,7 @@ go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...        # the rest of it
 ```
 
 Check exit codes, not output. `make test && make lint` green is not CI
-green: the `analysis` job runs the two commands above, and the `go` job
+green: the `analysis` and `vulncheck` jobs run the two commands above, and the `go` job
 also runs `goreleaser check`, which is what keeps a broken
 `.goreleaser.yaml` from surfacing at tag time.
 
@@ -48,7 +48,8 @@ spaces --version                 # says which build answered: the checkout stamp
 ```
 
 CI (`.github/workflows/ci.yml`): `go` (lint, test, `goreleaser check`)
-and `analysis` (staticcheck, govulncheck). `gh run list --workflow ci
+`analysis` (staticcheck) and `vulncheck` (govulncheck on go.mod's
+toolchain). `gh run list --workflow ci
 --branch main --limit 1` shows it.
 
 Karabiner and skhd prefix `~/.eden/bin` on PATH, so a hotkey runs the
