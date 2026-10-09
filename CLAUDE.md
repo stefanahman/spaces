@@ -15,7 +15,7 @@ all of it and say which steps you did.
 make test      # go test ./... — a private tmux server per test
 make lint      # gofmt, go vet
 make build     # the binary at the repo root, for a quick try
-go run honnef.co/go/tools/cmd/staticcheck@2026.2.1 ./...     # CI's analysis job
+GOTOOLCHAIN=go1.27.1 go run honnef.co/go/tools/cmd/staticcheck@2026.2.1 ./...   # CI's analysis job; 2026.2.1 cannot read go1.27.2
 go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...        # the rest of it
 ```
 
@@ -90,6 +90,13 @@ gh run list --workflow release --branch v0.8.2 --json status,conclusion   # unti
 brew update && brew upgrade --cask spaces
 /opt/homebrew/bin/spaces --version
 ```
+
+A Go security release is a release here too. The `toolchain` line in
+go.mod is the Go every build uses — CI, the release, `make install` —
+and govulncheck reads it, so CI goes red (weekly, if nobody pushes)
+when that Go has a fix spaces needs. `go get toolchain@patch`, one commit
+`build: go1.X.Y — <the fix>`, and ship. Dependabot does not bump that
+line.
 
 A change in mux comes first: tag mux, `GOPROXY=direct go get
 github.com/stefanahman/mux@vX.Y.Z && go mod tidy`, one commit `build:
