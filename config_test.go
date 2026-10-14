@@ -102,7 +102,7 @@ spaces:
 
 // TestWorkspacesKeepTheirDeclaredOrder: the map the workspaces decode
 // into keeps no order, so the file's is read beside it — through an
-// alias too, the way bardo's cmux space shares the herdr space's.
+// alias too, the way a cmux space can share a herdr space's.
 func TestWorkspacesKeepTheirDeclaredOrder(t *testing.T) {
 	t.Setenv("HOME", "/home/owl")
 	spaces, _, err := mergeSpaces([]source{{"personal.yaml", []byte(`
@@ -174,7 +174,7 @@ spaces:
 
 func TestWorkspaces(t *testing.T) {
 	t.Setenv("HOME", "/home/owl")
-	spaces, _, err := mergeSpaces([]source{{"bardo.yaml", []byte(`
+	spaces, _, err := mergeSpaces([]source{{"work.yaml", []byte(`
 spaces:
   herdr:
     key: h
@@ -183,13 +183,13 @@ spaces:
     multiplexer: herdr
     session: work
     workspaces:
-      bf-1: {cwd: ~/Development/bardo/bardo-system, windows: [shell, {name: nvim, command: nvim}]}
+      bf-1: {cwd: ~/Development/work/app, windows: [shell, {name: nvim, command: nvim}]}
       eden:
         cwd: ~/Development/eden
         windows:
           - {name: eden, panes: [{}, {cwd: ~/Development/eden-private-branches}]}
           - {name: nvim, command: nvim, cwd: ~/Development/eden-private-branches}
-      pr-owl: {cwd: ~/Development/bardo/bardo-system, windows: [{name: pr-owl, command: pr-owl --mux herdr}]}
+      pr-owl: {cwd: ~/Development/work/app, windows: [{name: pr-owl, command: pr-owl --mux herdr}]}
     select: pr-owl
   cmux:
     key: c
@@ -198,7 +198,7 @@ spaces:
     env: {CMUX_SOCKET_MODE: allowAll}
     multiplexer: cmux
     workspaces:
-      pr-owl: {cwd: ~/Development/bardo/bardo-system, windows: [{name: pr-owl, command: pr-owl --mux cmux}]}
+      pr-owl: {cwd: ~/Development/work/app, windows: [{name: pr-owl, command: pr-owl --mux cmux}]}
 `)}})
 	if err != nil {
 		t.Fatal(err)
@@ -403,7 +403,7 @@ func TestYabaiRules(t *testing.T) {
 		{Name: "bf-2", Space: 4},
 		{Name: "bf-1", Space: 3},
 		{Name: "pr-reviews", Space: 9},
-		{Name: "backstage", Space: 10, App: "Bardo Backstage (Beta)"},
+		{Name: "beta-app", Space: 10, App: "Example App (Beta)"},
 		{Name: "cmux", Space: 8, App: "cmux"},
 		{Name: "unpinned-app", App: "Slack"},
 	}
@@ -415,7 +415,7 @@ func TestYabaiRules(t *testing.T) {
 yabai -m rule --add app="^Ghostty$" title="^bf-2$" space=^4
 yabai -m rule --add app="^cmux$" space=^8
 yabai -m rule --add app="^Ghostty$" title="^pr-reviews$" space=^9
-yabai -m rule --add app="^Bardo Backstage \(Beta\)$" space=^10
+yabai -m rule --add app="^Example App \(Beta\)$" space=^10
 yabai -m rule --add app="^Ghostty$" title="^eden$" space=^11
 `
 	if out.String() != want {
@@ -450,7 +450,7 @@ spaces:
       bf-1: {key: "1", group: Features, windows: [w]}
       loose: {windows: [w]}
 `)},
-		{"bardo.yaml", []byte(`
+		{"work.yaml", []byte(`
 groups:
   Tooling:  {color: "#8fa1b3", icon: wrench.and.screwdriver}
   Features: {color: "#a3be8c"}

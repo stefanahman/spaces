@@ -45,19 +45,19 @@ func workContext(t *testing.T, muxKind string) (map[string]Workspace, map[string
 		t.Fatal(err)
 	}
 	dirs := map[string]string{}
-	for _, d := range []string{"bardo", "eden", "branches"} {
+	for _, d := range []string{"app", "eden", "branches"} {
 		dirs[d] = filepath.Join(root, d)
 		if err := os.Mkdir(dirs[d], 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
 	return map[string]Workspace{
-		"bf-1": {Cwd: pathList{dirs["bardo"]}, Windows: []Window{{Name: "shell"}, {Name: "nvim", Command: "nvim"}}},
+		"bf-1": {Cwd: pathList{dirs["app"]}, Windows: []Window{{Name: "shell"}, {Name: "nvim", Command: "nvim"}}},
 		"eden": {Cwd: pathList{dirs["eden"]}, Windows: []Window{
 			{Name: "eden", Panes: []Pane{{}, {Cwd: pathList{dirs["branches"]}}}},
 			{Name: "nvim", Command: "nvim", Cwd: pathList{dirs["branches"]}},
 		}},
-		"pr-owl": {Cwd: pathList{dirs["bardo"]}, Windows: []Window{{Name: "pr-owl", Command: "pr-owl --mux " + muxKind}}},
+		"pr-owl": {Cwd: pathList{dirs["app"]}, Windows: []Window{{Name: "pr-owl", Command: "pr-owl --mux " + muxKind}}},
 	}, dirs
 }
 
@@ -87,7 +87,7 @@ func TestRenderOnHerdr(t *testing.T) {
 		t.Errorf("out %q, err %q", out.String(), errOut.String())
 	}
 	bf := fake.Workspace("bf-1")
-	if bf == nil || bf.Cwd != dirs["bardo"] || !reflect.DeepEqual(bf.Tabs, []string{"1", "nvim"}) || len(bf.Panes) != 2 {
+	if bf == nil || bf.Cwd != dirs["app"] || !reflect.DeepEqual(bf.Tabs, []string{"1", "nvim"}) || len(bf.Panes) != 2 {
 		t.Fatalf("bf-1 = %+v", bf)
 	}
 	if got := fake.Typed(bf.Panes[1]); !reflect.DeepEqual(got, []string{"nvim<enter>"}) {
@@ -362,13 +362,13 @@ func TestRenderOnCmux(t *testing.T) {
 		t.Errorf("out %q, err %q", out.String(), errOut.String())
 	}
 	bf, _ := fake.Workspace("bf-1")
-	if bf.Cwd != dirs["bardo"] || len(bf.Panes) != 1 || len(bf.Panes[0].Surfaces) != 2 || bf.Panes[0].Surfaces[1].Title != "nvim" {
+	if bf.Cwd != dirs["app"] || len(bf.Panes) != 1 || len(bf.Panes[0].Surfaces) != 2 || bf.Panes[0].Surfaces[1].Title != "nvim" {
 		t.Fatalf("bf-1 = %+v", bf)
 	}
 	// A fresh surface is moved to its directory, then its command is
 	// typed, as it is.
 	nvimTab := bf.Panes[0].Surfaces[1].ID
-	if got := fake.Typed(nvimTab); !reflect.DeepEqual(got, []string{"cd '" + dirs["bardo"] + "'", "<enter>", "nvim", "<enter>"}) {
+	if got := fake.Typed(nvimTab); !reflect.DeepEqual(got, []string{"cd '" + dirs["app"] + "'", "<enter>", "nvim", "<enter>"}) {
 		t.Errorf("bf-1 nvim tab typed %v", got)
 	}
 	eden, _ := fake.Workspace("eden")
@@ -428,7 +428,7 @@ func TestRenderMakesAnOnDemandWorkspaceOnlyForItsOwnKey(t *testing.T) {
 	d := mux.Cmux{}
 	workspaces, dirs := workContext(t, "cmux")
 	workspaces["lazygit"] = Workspace{
-		Cwd: pathList{dirs["bardo"]}, OnDemand: true,
+		Cwd: pathList{dirs["app"]}, OnDemand: true,
 		Windows: []Window{{Name: "lazygit", Command: "lazygit"}},
 	}
 	sp := Space{Name: "cmux", App: "cmux", Multiplexer: "cmux", Workspaces: workspaces, Select: "pr-owl"}
@@ -481,7 +481,7 @@ func TestRenderKeepsAnOnDemandWorkspaceThatIsStillThere(t *testing.T) {
 	d := mux.Cmux{}
 	workspaces, dirs := workContext(t, "cmux")
 	workspaces["lazygit"] = Workspace{
-		Cwd: pathList{dirs["bardo"]}, OnDemand: true,
+		Cwd: pathList{dirs["app"]}, OnDemand: true,
 		Windows: []Window{{Name: "lazygit", Command: "lazygit"}},
 	}
 	sp := Space{Name: "cmux", App: "cmux", Multiplexer: "cmux", Workspaces: workspaces, Select: "pr-owl"}

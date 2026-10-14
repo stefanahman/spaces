@@ -611,11 +611,11 @@ func TestCheckWarnsOnUnusedGroup(t *testing.T) {
 	}}
 	groups := map[string]Group{
 		"Tooling": {Color: "#8fa1b3", file: "macos.yaml"},
-		"Ghosts":  {Icon: "hammer", file: "bardo.yaml"},
+		"Ghosts":  {Icon: "hammer", file: "work.yaml"},
 	}
 	var out strings.Builder
 	_ = check(d, spaces, groups, &out)
-	if want := `warning: group "Ghosts" is declared in bardo.yaml and no workspace joins it`; !strings.Contains(out.String(), want) {
+	if want := `warning: group "Ghosts" is declared in work.yaml and no workspace joins it`; !strings.Contains(out.String(), want) {
 		t.Errorf("check said %q, want %q", out.String(), want)
 	}
 	if strings.Contains(out.String(), `"Tooling"`) {
